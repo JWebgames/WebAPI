@@ -9,8 +9,13 @@ class ConfigOptionTypeError(ConfigError):
             option, block, block._field_types[option], actual_type))
 
 
-class ConfigUnknownOption(ConfigError):
+class ConfigUnknownOptionError(ConfigError):
     template = "Option \"{}\" in block \"{}\" is unknown."
     def __init__(self, option, block):
         super().__init__(self, self.template.format(
             option, block))
+
+class ConfigMissingOptionError(ConfigError):
+    template = "Options {} from block \"{}\" are missing."
+    def __init__(self, missings, block):
+        super().__init__(self, self.template.format(missings, block))
