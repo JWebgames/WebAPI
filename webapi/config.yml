@@ -4,7 +4,7 @@ webapi:
   JWT_SECRET: super-server-password
 
 postgres:
-  DNS:
+  DSN:
   HOST:
   PORT:
   USER:
