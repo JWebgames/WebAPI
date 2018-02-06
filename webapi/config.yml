@@ -1,7 +1,7 @@
 webapi:
   HOST: localhost
   PORT: 22548
-  JWT_SECRET: super-server-password
+  JWT_SECRET: super-secret-password
 
 postgres:
   DSN:
