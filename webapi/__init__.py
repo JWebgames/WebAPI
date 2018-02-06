@@ -1,2 +1,2 @@
-from config import load as load_config
-load_config()
+import config
+config.load_merge_expose()

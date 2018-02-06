@@ -1,19 +1,20 @@
-from collections import ChainMap, namedtuple
-from typing import NamedTuple, Optional, Union
 from argparse import ArgumentParser
-from pathlib import Path
+from collections import ChainMap, namedtuple
 from os import environ
+from pathlib import Path
 from sys import argv
-from yaml import load as yaml_load
+from typing import NamedTuple, Optional, Union
+from yaml import safe_load as yaml_load, dump as yaml_dump
 from exceptions import ConfigOptionTypeError,\
                        ConfigUnknownOptionError,\
                        ConfigMissingOptionError
+from tools import cast, real_type
 
 
 class WebAPIConfig(NamedTuple):
-    HOST: str
-    PORT: int
-    JWT_SECRET: str
+    HOST: str = "loclhost"
+    PORT: int = 22548
+    JWT_SECRET: str = "super-secret-password"
 
 
 class PostgresConfig(NamedTuple):
@@ -26,49 +27,31 @@ class PostgresConfig(NamedTuple):
     SSL: Optional[bool] = None
 
 
-def cast(typ, val):
-    return real_type(typ)(val)
-
-
-def real_type(typ):
-    if typ.__class__ in [Union.__class__, Optional.__class__]:
-        return typ.__args__[0]
-    else:
-        return typ
-
-
+webapi: WebAPIConfig
+postgres: PostgresConfig
 Triple = namedtuple("Triple", ["name", "prefix", "block"])
 triples = [
     Triple("webapi", "WG_API_", WebAPIConfig),
     Triple("postgres", "PG", PostgresConfig)
 ]
 
-webapi: WebAPIConfig
-postgres: PostgresConfig
-def load():
-    cli = load_from_cli()
-    env = load_from_environ()
-    yml = load_from_file()
-    
+
+def get_default():
+    return {name: dict(block()._asdict()) for name, _, block in triples}
+
+
+def get_from_cli():
+    parser = ArgumentParser(description="Webgames Web API for managing games")
     for name, _, block in triples:
-        config = ChainMap(cli.get(name, {}), env.get(name, {}), yml.get(name, {}))
-        validate_config(name, block, config)
-        globals()[name] = block(**config)
+        name_lower = name.lower()
+        for key in block._fields:
+            parser.add_argument("--%s_%s" % (name_lower, key.lower()),
+                                type=real_type(block._field_types[key]),
+                                action="store")
+    return parser.parse_args().__dict__
 
 
-def load_from_file():
-    with Path("config.yml").open() as yaml_file:
-        yaml_config = yaml_load(yaml_file)
-
-    for name, _, block in triples:
-        for key in set(block._fields) & set(yaml_config[name]):
-            if yaml_config[name][key] is not None:
-                yaml_config[name][key] = cast(block._field_types[key], yaml_config[name][key])
-    
-    return yaml_config
-
-
-def load_from_environ():
+def get_from_env():
     environ_config = {}
     for name, prefix, block in triples:
         environ_config[name] = {}
@@ -80,15 +63,16 @@ def load_from_environ():
     return environ_config
 
 
-def load_from_cli():
-    parser = ArgumentParser(description="Webgames Web API for managing games")
-    for name, prefix, block in triples:
-        name_lower = name.lower()
-        for key in block._fields:
-            parser.add_argument("--%s_%s" % (name_lower, key.lower()),
-                                type=real_type(block._field_types[key]),
-                                action="store")
-    return parser.parse_args().__dict__
+def get_from_yml():
+    with Path("config.yml").open() as yaml_file:
+        yaml_config = yaml_load(yaml_file)
+
+    for name, _, block in triples:
+        for key in set(block._fields) & set(yaml_config[name]):
+            if yaml_config[name][key] is not None:
+                yaml_config[name][key] = cast(block._field_types[key], yaml_config[name][key])
+    
+    return yaml_config
 
 
 def validate_config(name, block, config) -> None:
@@ -103,14 +87,31 @@ def validate_config(name, block, config) -> None:
         else:
             types = block._field_types[key]
         if not isinstance(value, types):
-            raise ConfigOptionTypeError(key, name, type(value))
+            raise ConfigOptionTypeError(key, name, types, type(value))
 
     missings = set(block._fields) - config.keys()
     if missings:
         raise ConfigMissingOptionError(missings, name)
 
 
+def load_merge_expose():
+    cli = get_from_cli()
+    env = get_from_env()
+    yml = get_from_yml()
+
+    for name, _, block in triples:
+        config = ChainMap(cli.get(name, {}), env.get(name, {}), yml.get(name, {}))
+        validate_config(name, block, config)
+        globals()[name] = block(**config)
+
+
+def export_default_config_to_yml_file():
+    with Path("newconfig.yml").open("w") as yaml_file:
+        yaml_dump(get_default(), yaml_file, default_flow_style=False)
+
+
 if __name__ == "__main__":
-    load()
+    export_default_config_to_yml_file()
+    load_merge_expose()
     for config in [webapi, postgres]:
         print(config)
