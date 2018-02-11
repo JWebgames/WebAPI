@@ -1,20 +1,25 @@
 from argparse import ArgumentParser
 from collections import ChainMap, namedtuple
+from logging import getLogger
 from os import environ
 from pathlib import Path
 from sys import argv
 from typing import NamedTuple, Optional, Union
 from yaml import safe_load as yaml_load, dump as yaml_dump
+
 from exceptions import ConfigOptionTypeError,\
                        ConfigUnknownOptionError,\
                        ConfigMissingOptionError
 from tools import cast, real_type
+
+logger = getLogger(__name__)
 
 
 class WebAPIConfig(NamedTuple):
     HOST: str = "loclhost"
     PORT: int = 22548
     JWT_SECRET: str = "super-secret-password"
+    LOG_LEVEL: str = "WARN"
 
 
 class PostgresConfig(NamedTuple):
@@ -24,15 +29,24 @@ class PostgresConfig(NamedTuple):
     USER: Optional[str] = None
     DATABASE: Optional[str] = None
     PASSWORD: Optional[str] = None
-    SSL: Optional[bool] = None
+
+
+class RedisConfig(NamedTuple):
+    DSN: Optional[str] = None
+    HOST: Optional[str] = None
+    PORT: Optional[int] = None
+    DATABASE: Optional[str] = None
+    PASSWORD: Optional[str] = None
 
 
 webapi: WebAPIConfig
 postgres: PostgresConfig
+redis: RedisConfig
 Triple = namedtuple("Triple", ["name", "prefix", "block"])
 triples = [
     Triple("webapi", "WG_API_", WebAPIConfig),
-    Triple("postgres", "PG", PostgresConfig)
+    Triple("postgres", "PG", PostgresConfig),
+    Triple("redis", "REDIS_", RedisConfig)
 ]
 
 
@@ -95,14 +109,21 @@ def validate_config(name, block, config) -> None:
 
 
 def load_merge_expose():
+    logger.debug("Get configuration from command line interface.")
     cli = get_from_cli()
+    logger.debug("Get configuration from environment variables.")
     env = get_from_env()
+    logger.debug("Get configuration from YAML configuration file.")
     yml = get_from_yml()
 
     for name, _, block in triples:
+        logger.debug("Merge block %s.", name)
         config = ChainMap(cli.get(name, {}), env.get(name, {}), yml.get(name, {}))
+        logger.debug("Validate block %s.", name)
         validate_config(name, block, config)
+        logger.debug("Expose block %s.", name)
         globals()[name] = block(**config)
+    logger.info("Configuration loaded.")
 
 
 def export_default_config_to_yml_file():
