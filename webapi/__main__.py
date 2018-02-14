@@ -1,5 +1,5 @@
 import logging
-from logging.handlers import MemoryHandler
+from tools import DelayLogFor
 import config
 import server
 
@@ -9,22 +9,18 @@ logger = logging.getLogger(__name__)
 logging.root.level = logging.NOTSET
 logging.addLevelName(45, "SECURITY")
 
-logging.getLogger("sanic.error").handlers.clear()
-logging.getLogger("sanic.access").handlers.clear()
-
-buffer = MemoryHandler(1000000)
-logging.root.addHandler(buffer)
-
-config.load_merge_expose()
-
 stdout = logging.StreamHandler()
 stdout.formatter = logging.Formatter(
     "{asctime} [{levelname}] <{name}:{funcName}> {message}", style="{")
-stdout.level=logging.INFO
-logging.root.removeHandler(buffer)
-buffer.setTarget(stdout)
-buffer.close()
+logging.root.handlers.clear()
 logging.root.addHandler(stdout)
+
+logging.getLogger("sanic.error").handlers.clear()
+logging.getLogger("sanic.access").handlers.clear()
+
+with DelayLogFor(logging.root):
+    config.load_merge_expose()
+    stdout.level = logging._nameToLevel[config.webapi.LOG_LEVEL]
 
 logger.debug("debug")
 logger.info("info")
