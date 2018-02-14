@@ -19,7 +19,7 @@ class WebAPIConfig(NamedTuple):
     HOST: str = "loclhost"
     PORT: int = 22548
     JWT_SECRET: str = "super-secret-password"
-    LOG_LEVEL: str = "WARN"
+    LOG_LEVEL: str = "WARNING"
 
 
 class PostgresConfig(NamedTuple):
