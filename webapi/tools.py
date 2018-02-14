@@ -26,7 +26,7 @@ class DelayLogFor(BufferingHandler):
         try:
             for handler in self.delayed_handlers:
                 for record in self.buffer:
-                    if record.levelno >= max(self.logger.level, handler.level):
+                    if record.levelno >= handler.level:
                         handler.handle(record)
             self.buffer = []
         finally:
