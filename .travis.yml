@@ -2,8 +2,8 @@ language: python
 python:
   - "3.6"
 install:
-  - python setup.py install --user
-  - pip install --user pylint
+  - pip install -r
+  - pip install pylint
 script: python -m unittest webapi
 after_success: 
   - pylint --output-format=html pylint_server > /tmp/pylint-report.html
