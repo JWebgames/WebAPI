@@ -1,14 +1,20 @@
+"""
+Configuration manager
+
+Load and parse the configuration given by multiple sources and expose
+them in one merged NamedTuple per configuration block
+"""
+
 from argparse import ArgumentParser
 from collections import ChainMap, namedtuple
 from logging import getLogger
 from os import environ
-from sys import argv
-from typing import NamedTuple, Optional, Union
+from typing import NamedTuple, Optional
 from yaml import safe_load as yaml_load, dump as yaml_dump
 
 from .exceptions import ConfigOptionTypeError,\
-                       ConfigUnknownOptionError,\
-                       ConfigMissingOptionError
+                        ConfigUnknownOptionError,\
+                        ConfigMissingOptionError
 from .tools import cast, real_type, get_package_path
 
 logger = getLogger(__name__)
@@ -50,10 +56,12 @@ triples = [
 
 
 def get_default():
+    """Get the configuration from the source code"""
     return {name: dict(block()._asdict()) for name, _, block in triples}
 
 
 def get_from_cli():
+    """Get the configuration from the command line"""
     parser = ArgumentParser(description="Webgames Web API for managing games")
     for name, _, block in triples:
         name_lower = name.lower()
@@ -65,6 +73,7 @@ def get_from_cli():
 
 
 def get_from_env():
+    """Get the configuration from the environement variables"""
     environ_config = {}
     for name, prefix, block in triples:
         environ_config[name] = {}
@@ -72,11 +81,12 @@ def get_from_env():
             value = environ.get(prefix + key)
             if value:
                 environ_config[name][key] = cast(block._field_types[key], value)
-    
+
     return environ_config
 
 
 def get_from_yml():
+    """Get the configuration from the YAML configuration file"""
     with get_package_path().joinpath("config.yml").open() as yaml_file:
         yaml_config = yaml_load(yaml_file)
 
@@ -84,19 +94,19 @@ def get_from_yml():
         for key in set(block._fields) & set(yaml_config[name]):
             if yaml_config[name][key] is not None:
                 yaml_config[name][key] = cast(block._field_types[key], yaml_config[name][key])
-    
+
     return yaml_config
 
 
 def validate_config(name, block, config) -> None:
-    """Raise ConfigError for invalids, missings or unknowns options"""
+    """Look for invalid value type and missing/unknow fields"""
 
     for key, value in config.items():
         if key not in block._fields:
             raise ConfigUnknownOptionError(key, name)
 
         if "Union" in repr(block._field_types[key]):
-            types = block._field_types[key].__args__ 
+            types = block._field_types[key].__args__
         else:
             types = block._field_types[key]
         if not isinstance(value, types):
@@ -107,7 +117,12 @@ def validate_config(name, block, config) -> None:
         raise ConfigMissingOptionError(missings, name)
 
 
-def load_merge_expose():
+def load_merge_validate_expose():
+    """Load from different sources, merge them into one unique source,
+    validate the merged source, create one namedtuple per block and
+    expose them to be accessible as module variable."""
+
+    logger.info("Loading configuration...")
     logger.debug("Get configuration from command line interface.")
     cli = get_from_cli()
     logger.debug("Get configuration from environment variables.")
@@ -125,13 +140,7 @@ def load_merge_expose():
     logger.info("Configuration loaded.")
 
 
-def export_default_config_to_yml_file():
-    with get_package_path().joinpath("newconfig.yml").open("w") as yaml_file:
+def export_default_config():
+    """Replace /config.yml by a new one generated from hardcoded values"""
+    with get_package_path().joinpath("config.yml").open("w") as yaml_file:
         yaml_dump(get_default(), yaml_file, default_flow_style=False)
-
-
-if __name__ == "__main__":
-    export_default_config_to_yml_file()
-    load_merge_expose()
-    for config in [webapi, postgres]:
-        print(config)

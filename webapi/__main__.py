@@ -1,3 +1,5 @@
+"""Entrypoint load configuration, setup logging and start the server"""
+
 import logging
 from .tools import DelayLogFor
 from . import config
@@ -19,7 +21,7 @@ logging.getLogger("sanic.error").handlers.clear()
 logging.getLogger("sanic.access").handlers.clear()
 
 with DelayLogFor(logging.root):
-    config.load_merge_expose()
+    config.load_merge_validate_expose()
     stdout.level = logging._nameToLevel[config.webapi.LOG_LEVEL]
 
 server.app.run(host=config.webapi.HOST, port=config.webapi.PORT)
