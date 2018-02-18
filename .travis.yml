@@ -7,4 +7,4 @@ install:
 script: python -m unittest -v
 after_success: 
   - pylint webapi --reports=y > /tmp/pylint-report
-  - curl -v -m 30 -X POST -F pylint-report=@/tmp/pylint-score https://pylint.julien00859.be/reports
+  - curl -v -m 30 -X POST -F pylint-report=@/tmp/pylint-report https://pylint.julien00859.be/reports
