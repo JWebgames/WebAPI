@@ -6,5 +6,5 @@ install:
   - pip install pylint
 script: python -m unittest -v
 after_success: 
-  - pylint --output-format=html pylint_server > /tmp/pylint-report.html
-  - curl -v -m 120 -X POST -F travis-job-id=$TRAVIS_JOB_ID -F pylint-report=@/tmp/pylint-report.html https://pylint.julien00859.be/reports
+  - pylint webapi --reports=y > /tmp/pylint-report
+  - curl -v -m 30 -X POST -F pylint-report=@/tmp/pylint-score https://pylint.julien00859.be/reports
