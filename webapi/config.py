@@ -2,15 +2,14 @@ from argparse import ArgumentParser
 from collections import ChainMap, namedtuple
 from logging import getLogger
 from os import environ
-from pathlib import Path
 from sys import argv
 from typing import NamedTuple, Optional, Union
 from yaml import safe_load as yaml_load, dump as yaml_dump
 
-from exceptions import ConfigOptionTypeError,\
+from .exceptions import ConfigOptionTypeError,\
                        ConfigUnknownOptionError,\
                        ConfigMissingOptionError
-from tools import cast, real_type
+from .tools import cast, real_type, get_package_path
 
 logger = getLogger(__name__)
 
@@ -78,7 +77,7 @@ def get_from_env():
 
 
 def get_from_yml():
-    with Path("config.yml").open() as yaml_file:
+    with get_package_path().joinpath("config.yml").open() as yaml_file:
         yaml_config = yaml_load(yaml_file)
 
     for name, _, block in triples:
@@ -127,7 +126,7 @@ def load_merge_expose():
 
 
 def export_default_config_to_yml_file():
-    with Path("newconfig.yml").open("w") as yaml_file:
+    with get_package_path().joinpath("newconfig.yml").open("w") as yaml_file:
         yaml_dump(get_default(), yaml_file, default_flow_style=False)
 
 

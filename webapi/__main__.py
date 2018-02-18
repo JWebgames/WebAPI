@@ -1,7 +1,7 @@
 import logging
-from tools import DelayLogFor
-import config
-import server
+from .tools import DelayLogFor
+from . import config
+from . import server
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +22,4 @@ with DelayLogFor(logging.root):
     config.load_merge_expose()
     stdout.level = logging._nameToLevel[config.webapi.LOG_LEVEL]
 
-logger.debug("debug")
-logger.info("info")
-logger.warning("warning")
-
-# server.app.run(host=config.webapi.HOST, port=config.webapi.PORT)
+server.app.run(host=config.webapi.HOST, port=config.webapi.PORT)

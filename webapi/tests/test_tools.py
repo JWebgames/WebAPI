@@ -1,6 +1,6 @@
 from typing import Union, Optional
 from unittest import TestCase
-from tools import cast, real_type, DelayLogFor
+from ..tools import cast, real_type, DelayLogFor
 import logging
 from sys import stdout
 
@@ -51,6 +51,3 @@ class TestDelayLogFor(TestCase):
                 self.logger.warning("warning")
 
         self.assertEqual(cm.output, ["WARNING:test_delay_log:warning"])
-
-if __name__ == "__main__":
-    unittest.main()

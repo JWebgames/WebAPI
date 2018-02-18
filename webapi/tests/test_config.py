@@ -2,15 +2,15 @@ from typing import Optional, Union
 from collections import ChainMap
 from unittest import TestCase
 
-from config import WebAPIConfig,\
-                   PostgresConfig,\
-                   triples,\
-                   get_default,\
-                   validate_config
+from ..config import WebAPIConfig,\
+                     PostgresConfig,\
+                     triples,\
+                     get_default,\
+                     validate_config
 
-from exceptions import ConfigMissingOptionError,\
-                       ConfigOptionTypeError,\
-                       ConfigUnknownOptionError
+from ..exceptions import ConfigMissingOptionError,\
+                         ConfigOptionTypeError,\
+                         ConfigUnknownOptionError
 
 
 class TestValidateConfig(TestCase):

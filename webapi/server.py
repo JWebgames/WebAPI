@@ -5,7 +5,7 @@ import logging
 import aioredis
 import asyncpg
 from sanic import Sanic
-import config
+from . import config
 
 logger = logging.getLogger(__name__)
 app = Sanic()
@@ -24,7 +24,7 @@ async def setup_postgres(app, loop):
         password=config.postgres.PASSWORD
     )
     logger.info("Connection to postgres established.")
-    
+
 
 redis: aioredis.ConnectionsPool
 @app.listener("before_server_start")
