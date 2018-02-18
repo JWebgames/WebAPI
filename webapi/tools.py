@@ -2,6 +2,8 @@ from typing import Union, Optional
 from contextlib import contextmanager
 import logging
 from logging.handlers import BufferingHandler
+import sys
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +16,10 @@ def real_type(typ):
         return typ.__args__[0]
     else:
         return typ
+
+
+def get_package_path():
+    return Path(sys.modules['__main__'].__file__).parent
 
 
 class DelayLogFor(BufferingHandler):
