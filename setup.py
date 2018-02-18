@@ -9,8 +9,10 @@ setup(name='webapi',
       license="MIT",
       packages=["webapi"],
       install_requires=[
-          "sanic",
+          "aioredis",
+          "asyncpg",
+          "pyjwt",
           "PyYAML",
-          "asyncpg"
+          "sanic"
       ],
       zip_safe=False)
