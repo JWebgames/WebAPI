@@ -25,6 +25,7 @@ class WebAPIConfig(NamedTuple):
     PORT: int = 22548
     JWT_SECRET: str = "super-secret-password"
     LOG_LEVEL: str = "WARNING"
+    PRODUCTION: bool = False
 
 
 class PostgresConfig(NamedTuple):
@@ -58,6 +59,11 @@ triples = [
 def get_default():
     """Get the configuration from the source code"""
     return {name: dict(block()._asdict()) for name, _, block in triples}
+
+def expose_default():
+    default_config = get_default()
+    for name, _, block in triples:
+        globals()[name] = block(**default_config[name])
 
 
 def get_from_cli():
