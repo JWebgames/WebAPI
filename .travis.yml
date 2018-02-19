@@ -3,7 +3,7 @@ python:
   - "3.6"
 install:
   - pip install -r requirements.txt
-  - pip install pylint coverage codecov
+  - pip install pylint coverage codecov aiohttp
 script: python -m unittest -v
 after_success: 
   - coverage run -m unittest
