@@ -8,6 +8,13 @@ from typing import Union, Optional
 
 logger = logging.getLogger(__name__)
 
+def find(key, it):
+    for value in it:
+        if key(value):
+            return value
+    else:
+        return None
+
 def cast(typ, val):
     """Cast a value to the given type. /!\\ Hack /!\\"""
     return real_type(typ)(val)
