@@ -2,6 +2,7 @@
 [![Build Status](https://travis-ci.org/JWebgames/WebAPI.svg?branch=master)](https://travis-ci.org/JWebgames/WebAPI)
 [![Pylint Score](https://pylint.julien00859.be/rating.svg)](https://pylint.julien00859.be/report.html)
 [![codecov](https://codecov.io/gh/JWebgames/WebAPI/branch/master/graph/badge.svg)](https://codecov.io/gh/JWebgames/WebAPI)
+[![Updates](https://pyup.io/repos/github/JWebgames/WebAPI/shield.svg)](https://pyup.io/repos/github/JWebgames/WebAPI/)
 
 # WebAPI
 
