@@ -8,12 +8,12 @@ from typing import Union, Optional
 
 logger = logging.getLogger(__name__)
 
-def find(key, it):
-    for value in it:
-        if key(value):
+def find(func, iteratee):
+    """Returns the first element that match the query"""
+    for value in iteratee:
+        if func(value):
             return value
-    else:
-        return None
+    return None
 
 def cast(typ, val):
     """Cast a value to the given type. /!\\ Hack /!\\"""

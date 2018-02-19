@@ -5,12 +5,14 @@ from asyncio import sleep
 from typing import Optional
 import aioredis
 import asyncpg
+from asyncpg.exceptions import IntegrityConstraintViolationError
 from sanic import Sanic
+from sanic.exceptions import SanicException
 
 app = Sanic(__name__, configure_logging=False)
 from . import config
-from . import middlewares
-from .routes import auth
+from .middlewares import safe_http, safe_sql
+#from .routes import auth
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +35,6 @@ async def setup_postgres(_, loop):
     else:
         logger.info("Running without postgres.")
         await sleep(0)
-    
 
 
 redis: Optional[aioredis.ConnectionsPool] = None
@@ -59,3 +60,5 @@ async def setup_redis(_, loop):
         logger.info("Running without redis.")
         await sleep(0)
 
+app.exception(SanicException)(safe_http)
+app.exception(IntegrityConstraintViolationError)(safe_sql)

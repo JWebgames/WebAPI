@@ -4,9 +4,11 @@ python:
 install:
   - pip install -r requirements.txt
   - pip install pylint coverage codecov aiohttp
-script: python -m unittest -v
+script: 
+  - python -m unittest -v
+  - python -m webapi dryrun
 after_success: 
   - coverage run -m unittest
   - codecov
-  - pylint webapi --reports=y > /tmp/pylint-report
+  - pylint webapi --reports=y --const-naming-style=any > /tmp/pylint-report
   - curl -v -m 30 -X POST -F pylint-report=@/tmp/pylint-report https://pylint.julien00859.be/reports

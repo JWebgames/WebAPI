@@ -1,6 +1,6 @@
+"""Helper module, call functions before/after sanic req/res"""
+
 from logging import getLogger
-from asyncpg.exceptions import IntegrityConstraintViolationError
-from sanic.exceptions import SanicException
 from sanic.response import json
 
 logger = getLogger(__name__)

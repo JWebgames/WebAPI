@@ -36,7 +36,7 @@ class TestValidateConfig(TestCase):
         self.assertRaises(
             ConfigOptionTypeError, validate, "webapi", WebAPIConfig, config)
 
-    def test_invalid_option_type_involving_typing(self):
+    def test_invalid_option_type_typing(self):
         """Should fail for invalid type (with Union/Optionnal)"""
         config = ChainMap({"DSN": 5}, self.default_config["postgres"])
         self.assertRaises(
@@ -49,8 +49,10 @@ class TestValidateConfig(TestCase):
             ConfigUnknownOptionError, validate, "webapi", WebAPIConfig, config)
 
 class TestMergeSources(TestCase):
+    """Test case for config.get_default and config.merge_sources"""
     def test_merged_default_is_default(self):
+        """Get default config and merge it, should be the same"""
         gen = merge_sources(get_default(), {})
-        for name, _, block in triples:
-            mname, mblock = next(gen)
+        for *_, block in triples:
+            _, mblock = next(gen)
             self.assertEqual(mblock, block())

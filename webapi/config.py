@@ -25,7 +25,9 @@ Source = NewType("Source", Dict[str, Dict[str, Any]])
 Triple = namedtuple("Triple", ["name", "prefix", "block"])
 triples = []
 def register(name, prefix=None):
+    """Set name and prefix for a config block"""
     def wrapped(block):
+        """Register a config block withe its name and prefix"""
         triples.append(Triple(name, prefix if prefix else name.upper(), block))
         return block
     return wrapped
@@ -34,6 +36,7 @@ def register(name, prefix=None):
 webapi: "WebAPIConfig"
 @register("webapi")
 class WebAPIConfig(NamedTuple):
+    """WebAPI configuration block"""
     HOST: str = "localhost"
     PORT: int = 22548
     JWT_SECRET: str = "super-secret-password"
@@ -44,6 +47,7 @@ class WebAPIConfig(NamedTuple):
 postgres: "PostgresConfig"
 @register("postgres")
 class PostgresConfig(NamedTuple):
+    """Postgres configuration block"""
     DSN: Optional[str] = None
     HOST: Optional[str] = None
     PORT: Optional[int] = None
@@ -55,6 +59,7 @@ class PostgresConfig(NamedTuple):
 redis: "RedisConfig"
 @register("redis")
 class RedisConfig(NamedTuple):
+    """Redis configuration block"""
     DSN: Optional[str] = None
     HOST: Optional[str] = None
     PORT: Optional[int] = None
@@ -62,7 +67,9 @@ class RedisConfig(NamedTuple):
     PASSWORD: Optional[str] = None
 
 
-def safe_assign(source: Source, block: NamedTuple, blockname: str, field: str, value: Any) -> None:
+def safe_assign(source: Source, block: NamedTuple,
+                blockname: str, field: str, value: Any) -> None:
+    """Cast the value and store the result in the source"""
     source[blockname][field] = cast(block._field_types[field], value)
 
 
@@ -97,7 +104,7 @@ def get_from_cli():
         field = key[pos+1:].upper()
         block = find(lambda fs: fs[0] == name, triples).block
         safe_assign(cli_config, block, name, field, value)
-    
+
     return cli_config
 
 
@@ -120,8 +127,9 @@ def get_from_yml():
 
     for name, _, block in triples:
         for key in set(block._fields) & set(yaml_config[name]):
-            if yaml_config[name][key] is not None:
-                yaml_config[name][key] = cast(block._field_types[key], yaml_config[name][key])
+            value = yaml_config[name][key]
+            if value is not None:
+                safe_assign(yaml_config, block, name, key, value)
 
     return yaml_config
 
