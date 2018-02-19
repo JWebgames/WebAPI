@@ -6,9 +6,11 @@ them in one merged NamedTuple per configuration block
 """
 
 from argparse import ArgumentParser
-from collections import ChainMap, namedtuple
+from collections import ChainMap, namedtuple, defaultdict
 from logging import getLogger
+from operator import attrgetter
 from os import environ
+from sys import exit
 from typing import NamedTuple, Optional
 from yaml import safe_load as yaml_load, dump as yaml_dump
 
@@ -66,16 +68,30 @@ def expose_default():
         globals()[name] = block(**default_config[name])
 
 
+showconfig = False
 def get_from_cli():
     """Get the configuration from the command line"""
     parser = ArgumentParser(description="Webgames Web API for managing games")
+    parser.add_argument("--showconfig", action="store_true", default=False, help="show the configuration and exit")
     for name, _, block in triples:
         name_lower = name.lower()
         for key in block._fields:
             parser.add_argument("--%s_%s" % (name_lower, key.lower()),
                                 type=real_type(block._field_types[key]),
                                 action="store")
-    return parser.parse_args().__dict__
+    cli = parser.parse_args()
+    if cli.showconfig:
+        global showconfig
+        showconfig = True
+
+    cliconfig = defaultdict({})
+    prefixes = list(map(attrgetter("name"), triples()))
+    for key, value in cli.__dict__.items():
+        # TODO
+        pass        
+
+    
+    return config.__dict__
 
 
 def get_from_env():
@@ -123,10 +139,31 @@ def validate_config(name, block, config) -> None:
         raise ConfigMissingOptionError(missings, name)
 
 
+def show():
+    blocknames = list(map(attrgetter("name"), triples))
+    print(blocknames)
+    for sourcename, source in [("cli", cli), ("env", env), ("yml", yml)]:
+        for blockname, block in source.items():
+            print(blockname)
+            if blockname in blocknames:
+                print("+{!s:-^63}+".format("{}:{}".format(sourcename, blockname)))
+                for key, value in block.items():
+                    print("| {!s:<30}|{!s:>30} |".format(key, value))
+
+    for block in [webapi, postgres, redis]:
+        print("+{:-^63}+".format("Merged:" + block.__class__.__name__))
+        for key, value in block._asdict().items():
+            print("| {!s:<30}|{!s:>30} |".format(key, value))
+    print("+{}+".format("-" * 63))
+
+
+
+cli = env = yml = None
 def load_merge_validate_expose():
     """Load from different sources, merge them into one unique source,
     validate the merged source, create one namedtuple per block and
     expose them to be accessible as module variable."""
+    global cli, env, yml
 
     cli = get_from_cli()
     env = get_from_env()
@@ -136,6 +173,10 @@ def load_merge_validate_expose():
         config = ChainMap(cli.get(name, {}), env.get(name, {}), yml.get(name, {}))
         validate_config(name, block, config)
         globals()[name] = block(**config)
+
+    if showconfig:
+        show()
+        exit(0)
 
 
 def export_default_config():
