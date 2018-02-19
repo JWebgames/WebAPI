@@ -122,22 +122,14 @@ def load_merge_validate_expose():
     validate the merged source, create one namedtuple per block and
     expose them to be accessible as module variable."""
 
-    logger.info("Loading configuration...")
-    logger.debug("Get configuration from command line interface.")
     cli = get_from_cli()
-    logger.debug("Get configuration from environment variables.")
     env = get_from_env()
-    logger.debug("Get configuration from YAML configuration file.")
     yml = get_from_yml()
 
     for name, _, block in triples:
-        logger.debug("Merge block %s.", name)
         config = ChainMap(cli.get(name, {}), env.get(name, {}), yml.get(name, {}))
-        logger.debug("Validate block %s.", name)
         validate_config(name, block, config)
-        logger.debug("Expose block %s.", name)
         globals()[name] = block(**config)
-    logger.info("Configuration loaded.")
 
 
 def export_default_config():
