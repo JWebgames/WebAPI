@@ -8,7 +8,7 @@ from .exceptions import ConfigError
 from .tools import DelayLogFor
 
 cmdparser = ArgumentParser()
-cmdparser.add_command("command", choices=["run", "dryrun", "showconfig", "exportconfig"])
+cmdparser.add_argument("command", choices=["run", "dryrun", "showconfig", "exportconfig"])
 command = cmdparser.parse_args(argv[1:2]).command
 
 if command in ["showconfig", "exportconfig"]:
