@@ -11,7 +11,7 @@ from logging import getLogger
 from operator import attrgetter, methodcaller
 from os import environ
 from sys import argv
-from typing import NamedTuple, Optional, Dict, List, Tuple, Any
+from typing import NamedTuple, Optional, Dict, List, Tuple, Any, NewType
 from yaml import safe_load as yaml_load, dump as yaml_dump
 
 from .exceptions import ConfigOptionTypeError,\
@@ -21,7 +21,7 @@ from .tools import cast, real_type, get_package_path, find
 
 logger = getLogger(__name__)
 
-
+Source = NewType("Source", Dict[str, Dict[str, Any]])
 Triple = namedtuple("Triple", ["name", "prefix", "block"])
 triples = []
 def register(name, prefix=None):
@@ -62,7 +62,7 @@ class RedisConfig(NamedTuple):
     PASSWORD: Optional[str] = None
 
 
-def safe_assign(source: Dict[str, Dict[str, Any]], block: NamedTuple, blockname: str, field: str, value: Any) -> None:
+def safe_assign(source: Source, block: NamedTuple, blockname: str, field: str, value: Any) -> None:
     source[blockname][field] = cast(block._field_types[field], value)
 
 
@@ -74,7 +74,8 @@ def get_default():
 def get_from_cli():
     """Get the configuration from the command line"""
     sentinel = object()
-    parser = ArgumentParser(description="Webgames Web API for managing games",
+    parser = ArgumentParser(prog="{} {}".format(argv[0], argv[1]),
+                            description="Webgames Web API for managing games",
                             argument_default=sentinel)
     for name, _, block in triples:
         name_lower = name.lower()
@@ -102,9 +103,8 @@ def get_from_cli():
 
 def get_from_env():
     """Get the configuration from the environement variables"""
-    environ_config = {}
+    environ_config = defaultdict(dict)
     for name, prefix, block in triples:
-        environ_config[name] = {}
         for field in block._fields:
             value = environ.get(prefix + field)
             if value:
@@ -182,7 +182,7 @@ def load_merge_validate_expose() -> None:
 
 def export_default_config() -> None:
     """Print the default yaml configuration"""
-    yaml_dump(get_default(), default_flow_style=False)
+    print(yaml_dump(get_default(), default_flow_style=False))
 
 
 def show() -> None:
