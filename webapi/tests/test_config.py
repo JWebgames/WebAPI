@@ -8,7 +8,6 @@ from ..config import WebAPIConfig,\
                      triples,\
                      get_default,\
                      validate_config
-
 from ..exceptions import ConfigMissingOptionError,\
                          ConfigOptionTypeError,\
                          ConfigUnknownOptionError
