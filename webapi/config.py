@@ -84,14 +84,14 @@ def get_from_cli():
         global showconfig
         showconfig = True
 
-    cliconfig = defaultdict({})
-    prefixes = list(map(attrgetter("name"), triples()))
+    cliconfig = defaultdict(dict)
+    prefixes = list(map(attrgetter("name"), triples))
     for key, value in cli.__dict__.items():
         # TODO
         pass        
 
     
-    return config.__dict__
+    return cli.__dict__
 
 
 def get_from_env():
