@@ -7,7 +7,8 @@ from ..config import WebAPIConfig,\
                      PostgresConfig,\
                      triples,\
                      get_default,\
-                     validate_config
+                     validate,\
+                     merge_sources
 from ..exceptions import ConfigMissingOptionError,\
                          ConfigOptionTypeError,\
                          ConfigUnknownOptionError
@@ -22,28 +23,34 @@ class TestValidateConfig(TestCase):
         """Validate against default values"""
         for name, _, block in triples:
             self.assertIsNone(
-                validate_config(name, block, self.default_config[name]))
+                validate(name, block, self.default_config[name]))
 
     def test_missing_option(self):
         """Should fail for any missing field"""
         self.assertRaises(
-            ConfigMissingOptionError, validate_config, "webapi", WebAPIConfig, {})
+            ConfigMissingOptionError, validate, "webapi", WebAPIConfig, {})
 
     def test_invalid_option_type(self):
         """Should fail for invalid type (without Union/Optionnal)"""
-        config = ChainMap({"HOST": None}, self.default_config["webapi"])
+        config = ChainMap({"HOST": 5}, self.default_config["webapi"])
         self.assertRaises(
-            ConfigOptionTypeError, validate_config, "webapi", WebAPIConfig, config)
+            ConfigOptionTypeError, validate, "webapi", WebAPIConfig, config)
 
     def test_invalid_option_type_involving_typing(self):
         """Should fail for invalid type (with Union/Optionnal)"""
         config = ChainMap({"DSN": 5}, self.default_config["postgres"])
         self.assertRaises(
-            ConfigOptionTypeError, validate_config, "postgres", PostgresConfig, config)
+            ConfigOptionTypeError, validate, "postgres", PostgresConfig, config)
 
     def test_unknown_option(self):
         """Should fail for unknow field"""
-        config = ChainMap({"DSN": None}, self.default_config["webapi"])
+        config = ChainMap({"foo": None}, self.default_config["webapi"])
         self.assertRaises(
-            ConfigUnknownOptionError, validate_config, "webapi", WebAPIConfig, config)
-        
+            ConfigUnknownOptionError, validate, "webapi", WebAPIConfig, config)
+
+class TestMergeSources(TestCase)
+    def test_merged_default_is_default(self):
+        gen = merge_sources(get_default(), {})
+        for name, _, block in triples:
+            mname, mblock = next(gen)
+            self.assertEqual(mblock, block())

@@ -1,26 +1,33 @@
 """Entrypoint load configuration, setup logging and start the server"""
 
 import logging
-from sys import exit
+from argparse import ArgumentParser
+from sys import argv, exit
 from . import config
-from . import server
 from .exceptions import ConfigError
 from .tools import DelayLogFor
 
-logger = logging.getLogger(__name__)
+cmdparser = ArgumentParser()
+cmdparser.add_command("command", choices=["run", "dryrun", "showconfig", "exportconfig"])
+command = cmdparser.parse_args(argv[1:2]).command
 
-# setup logging
+if command in ["showconfig", "exportconfig"]:
+	logging.root.level = logging.FATAL
+	if command == "showconfig":
+		config.show()
+	elif command == "exportconfig":
+		config.export_default_config()
+	exit(0)
+
 logging.root.level = logging.NOTSET
 logging.addLevelName(45, "SECURITY")
 
+logger = logging.getLogger(__name__)
 stdout = logging.StreamHandler()
 stdout.formatter = logging.Formatter(
     "{asctime} [{levelname}] <{name}:{funcName}> {message}", style="{")
 logging.root.handlers.clear()
 logging.root.addHandler(stdout)
-
-logging.getLogger("sanic.error").handlers.clear()
-logging.getLogger("sanic.access").handlers.clear()
 
 should_exit = False
 with DelayLogFor(logging.root):
@@ -33,5 +40,8 @@ with DelayLogFor(logging.root):
 if should_exit:
     exit(1)
 
-if not config.dryrun:
+from . import server
+if command == "run":
 	server.app.run(host=config.webapi.HOST, port=config.webapi.PORT)
+#elif command == "dryrun":
+#	exit(0)
