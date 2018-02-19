@@ -7,7 +7,7 @@ import aioredis
 import asyncpg
 from sanic import Sanic
 
-app = Sanic(__name__)
+app = Sanic(__name__, configure_logging=False)
 from . import config
 from . import middlewares
 from .routes import auth
