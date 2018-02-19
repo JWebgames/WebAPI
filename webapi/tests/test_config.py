@@ -48,7 +48,7 @@ class TestValidateConfig(TestCase):
         self.assertRaises(
             ConfigUnknownOptionError, validate, "webapi", WebAPIConfig, config)
 
-class TestMergeSources(TestCase)
+class TestMergeSources(TestCase):
     def test_merged_default_is_default(self):
         gen = merge_sources(get_default(), {})
         for name, _, block in triples:

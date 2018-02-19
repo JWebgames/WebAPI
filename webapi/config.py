@@ -170,7 +170,7 @@ def expose_default() -> None:
     """Expose the default configuration"""
     default_config = get_default()
     for name, *_ in triples:
-        expose_block(name, **default_config[name])
+        expose_block(name, default_config[name])
 
 
 def load_merge_validate_expose() -> None:
