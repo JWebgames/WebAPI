@@ -62,17 +62,21 @@ def get_default():
     """Get the configuration from the source code"""
     return {name: dict(block()._asdict()) for name, _, block in triples}
 
+
 def expose_default():
+    """Expose the default configuration instead of the sources"""
     default_config = get_default()
     for name, _, block in triples:
         globals()[name] = block(**default_config[name])
 
 
 showconfig = False
+dryrun = False
 def get_from_cli():
     """Get the configuration from the command line"""
     parser = ArgumentParser(description="Webgames Web API for managing games")
     parser.add_argument("--showconfig", action="store_true", default=False, help="show the configuration and exit")
+    parser.add_argument("--dryrun", action="store_true", default=False, help="load the module and exit")
     for name, _, block in triples:
         name_lower = name.lower()
         for key in block._fields:
@@ -83,6 +87,10 @@ def get_from_cli():
     if cli.showconfig:
         global showconfig
         showconfig = True
+
+    if cli.dryrun:
+        global dryrun
+        dryrun = True
 
     cliconfig = defaultdict(dict)
     prefixes = list(map(attrgetter("name"), triples))

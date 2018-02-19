@@ -33,4 +33,5 @@ with DelayLogFor(logging.root):
 if should_exit:
     exit(1)
 
-server.app.run(host=config.webapi.HOST, port=config.webapi.PORT)
+if not config.dryrun:
+	server.app.run(host=config.webapi.HOST, port=config.webapi.PORT)
