@@ -17,3 +17,7 @@ webapi:
   PORT: 22548
   LOG_LEVEL: WARNING
   JWT_SECRET: super-secret-password
+  REVERSE_PROXY_IPS: 
+    - 127.0.0.1
+    - ff00::80
+

@@ -1,34 +1,25 @@
 """Test runner for config module"""
 
-from typing import Union, Optional
+from typing import Union, Optional, List
 from unittest import TestCase
 import logging
 from sys import stdout
-from ..tools import cast, real_type, DelayLogFor
+from ..tools import cast, DelayLogFor
 
-class TestRealType(TestCase):
-    """Test case for tools.real_type"""
-
-    def test_real_type_optional(self):
-        """real type of typing.Optional"""
-        fake_type = Optional[int]
-        self.assertEqual(real_type(fake_type), int)
-
-    def test_real_type_union(self):
-        """real type of typing.Union"""
-        fake_type = Union[int, None]
-        self.assertEqual(real_type(fake_type), int)
-
-    def test_real_type_builtin(self):
-        """real type of builtins"""
-        self.assertEqual(int, int)
-
+from ipaddress import IPv4Address, IPv6Address
 
 class TestCast(TestCase):
     """Test case for tools.cast"""
     def test_cast_str_to_int(self):
         """try casting str to int"""
-        self.assertEqual(cast(int, "5"), 5)
+        self.assertEqual(cast("5", int), 5)
+
+    def test_cast_hard(selg):
+        """try smth very difficult"""
+        the_type = List[Union[IPV4Address, IPV6Address]]
+        
+        self.assertEqual(cast(["127.0.0.1", "fe80::"], the_type), 
+                         [IPV4Address("127.0.0.1"), IPV6Address("fe80::")])
 
 class TestDelayLogFor(TestCase):
     """Test case for tools.DelayLogFor"""
