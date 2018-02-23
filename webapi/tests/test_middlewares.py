@@ -7,11 +7,8 @@ from secrets import token_urlsafe
 from asyncpg.exceptions import IntegrityConstraintViolationError
 from sanic import Sanic
 from sanic.exceptions import SanicException, InvalidUsage
+from ..server import app
 
-from ..middlewares import safe_http,\
-                          safe_sql
-
-app = Sanic(configure_logging=False)
 ERROR_MESSAGE_1 = token_urlsafe(16)
 
 @app.route("/http_error")
@@ -23,9 +20,6 @@ def raise_http_error(_req):
 def raise_sql_error(_req):
     """Raise a sql error"""
     raise IntegrityConstraintViolationError()
-
-app.exception(SanicException)(safe_http)
-app.exception(IntegrityConstraintViolationError)(safe_sql)
 
 class TestExceptions(TestCase):
     """Test case for config.validate_cofig"""
