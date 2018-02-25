@@ -9,9 +9,9 @@ from sanic import Sanic
 
 app = Sanic(__name__, configure_logging=False)
 from . import config
-from . import databases
+from . import database
 from .middlewares import safe_http, safe_sql
-#from .routes import auth
+from .routes.auth import bp as authbp
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ async def setup_postgres(_, loop):
         password=config.postgres.PASSWORD,
         loop=loop
     )
-    databases.RDB = databases.Postgres(pgconn)
+    database.RDB = database.Postgres(pgconn)
     logger.info("Connection to postgres established.")
     
 
@@ -45,7 +45,7 @@ async def setup_redis(_, loop):
             password=config.redis.PASSWORD,
             loop=loop
         )
-    databases.KVS = databases.Redis(redisconn)
+    database.KVS = database.Redis(redisconn)
     logger.info("Connection to redis established.")
 
 
@@ -54,5 +54,8 @@ if config.webapi.PRODUCTION:
     app.listener("before_server_start")(setup_postgres)
     app.listener("before_server_start")(setup_redis)
 else:
-    databases.RDB = databases.SQLite()
-    databases.KVS = databases.InMemory()
+    database.RDB = database.SQLite()
+    database.KVS = database.InMemory()
+
+# Register routes
+app.blueprint(authbp, url_prefix="/v1/auth")
