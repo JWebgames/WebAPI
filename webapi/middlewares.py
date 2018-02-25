@@ -101,7 +101,7 @@ def authenticate(allowed_client_types: set):
 
             if ClientType(jwt["typ"]) not in allowed_client_types:
                 logger.log(45, 'Restricted access: "%s" not in {%s} (IP: %s)',
-                           jwt["typ"], ", ".join(allowed_client_types), req.ip)
+                           jwt["typ"], ", ".join(map(str, allowed_client_types)), req.ip)
                 raise Forbidden("Restricted access")
 
             return await func(req, *args, **kwargs, jwt=jwt)
