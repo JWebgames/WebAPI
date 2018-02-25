@@ -44,7 +44,7 @@ def raise_sql_error(_req):
 @app.route("/tests/auth")
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
 @coroutine
-def require_auth(_req, _jwt):
+def require_auth(_req, jwt):
     """Return an empty json, require authentication"""
     return json({})
 
@@ -52,7 +52,7 @@ def require_auth(_req, _jwt):
 @app.route("/tests/admin_auth")
 @authenticate({ClientType.ADMIN})
 @coroutine
-def require_auth_admin(_req, _jwt):
+def require_auth_admin(_req, jwt):
     """Return an empty json, require admin authentication"""
     return json({})
 
@@ -186,7 +186,11 @@ class TestRequireFields(TestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             _, res = app.test_client.post("/tests/fields", json={})
-        self.assertEqual(res.json["error"], "Fields {field1, field2} are missing")
+
+        if res.json["error"] != "Fields {field1, field2} are missing"\
+           and res.json["error"] != "Fields {field2, field1} are missing":
+            self.assertEqual(res.json["error"], "Fields {field1, field2} are missing")
+
         self.assertEqual(res.status, 400)
 
     def test_missing_some_fields(self):
