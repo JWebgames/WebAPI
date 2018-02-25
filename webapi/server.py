@@ -1,8 +1,6 @@
 """Setup sanic, redis and postgres"""
 
 import logging
-from asyncio import sleep
-from typing import Optional
 import aioredis
 import asyncpg
 from sanic import Sanic
@@ -10,7 +8,6 @@ from sanic import Sanic
 app = Sanic(__name__, configure_logging=False)
 from . import config
 from . import database
-from .middlewares import safe_http, safe_sql
 from .routes.auth import bp as authbp
 
 logger = logging.getLogger(__name__)
@@ -27,7 +24,7 @@ async def setup_postgres(_, loop):
         password=config.postgres.PASSWORD,
         loop=loop
     )
-    database.RDB = database.Postgres(pgconn)
+    database.RDB = database.Postgres(postgres)
     logger.info("Connection to postgres established.")
     
 

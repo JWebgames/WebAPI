@@ -1,27 +1,37 @@
+"""Interfaces and implementation for databases access"""
+
 import sqlite3
 from asyncio import coroutine
-from typing import Optional, List
 from os import listdir
 from .tools import get_package_path
 
 
-RDB : "RelationalDataBase"
-KVS : "KeyValueStore"
+RDB: "RelationalDataBase"
+KVS: "KeyValueStore"
 
 class RelationalDataBase():
+    """Interface for relational database access"""
     async def create_user(self, userid, name, email, hashed_password, isadmin):
+        """Create a user"""
         raise NotImplementedError()
 
     async def get_user_by_login(self, login):
+        """Get a user given its login (username or email)"""
+        raise NotImplementedError()
+
+    async def grant_admin(self, userid):
+        """Set a user as admin"""
         raise NotImplementedError()
 
 
 class Postgres(RelationalDataBase):
+    """Implementation for postgres"""
     def __init__(self, pgconn):
         self.conn = pgconn
 
 
 class SQLite(RelationalDataBase):
+    """Implementation database-free"""
     def __init__(self):
         dbfile = str(get_package_path().joinpath("data.sqlite3"))
         self.conn = sqlite3.connect(dbfile)
@@ -60,24 +70,28 @@ class SQLite(RelationalDataBase):
         cur.execute(self.queries["update_user_set_admin"], {userid: userid})
 
 
-
 # =================
 
 
 class KeyValueStore():
-    def revoke_token(self, future, token) -> None:
+    """Interface for key-value store access"""
+    def revoke_token(self, token_id) -> None:
+        """Set a token a revoked"""
         raise NotImplementedError()
 
-    def is_token_revoked(self, future, token) -> bool:
+    def is_token_revoked(self, token_id) -> bool:
+        """Validate a non-expirated token"""
         raise NotImplementedError()
 
 
 class Redis(KeyValueStore):
+    """Implementation for Redis"""
     def __init__(self, redis_conn):
         self.conn = redis_conn
 
 
 class InMemory(KeyValueStore):
+    """Implementation database-free"""
     def __init__(self):
         self.token_revocation_list = []
 
@@ -88,6 +102,3 @@ class InMemory(KeyValueStore):
     @coroutine
     def is_token_revoked(self, token_id) -> bool:
         return token_id in self.token_revocation_list
-
-
-        

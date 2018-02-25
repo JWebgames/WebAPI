@@ -2,8 +2,6 @@
 
 import logging
 import sys
-from asyncio import coroutine
-from functools import partial, wraps
 from logging.handlers import BufferingHandler
 from os import environ
 from pathlib import Path
@@ -30,14 +28,14 @@ def cast(val, typ, *types):
     # split Unions
     elif typ.__class__ == Union.__class__:
         return cast(val, *typ.__args__)
-    
+
     # consume List
     if typ.__class__ == List.__class__:
         values = []
         for element in val:
             values.append(cast(element, typ.__args__[0]))
         return values
-    
+
     # cast
     types = list(types) + [typ]
     for typ in types:
@@ -45,9 +43,9 @@ def cast(val, typ, *types):
             return typ(val)
         except:
             continue
-    else:
-        raise TypeError("{} not castable in any of {{{}}}.".format(typ, types))
-    
+
+    raise TypeError("{} not castable in any of {{{}}}.".format(val, types))
+
 
 
 def real_type(typ):

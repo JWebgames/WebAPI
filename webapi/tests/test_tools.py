@@ -1,12 +1,11 @@
 """Test runner for config module"""
 
-from typing import Union, Optional, List
-from unittest import TestCase
 import logging
-from sys import stdout
-from ..tools import cast, DelayLogFor
-
 from ipaddress import IPv4Address, IPv6Address
+from sys import stdout
+from typing import Union, List
+from unittest import TestCase
+from ..tools import cast, DelayLogFor
 
 class TestCast(TestCase):
     """Test case for tools.cast"""
@@ -17,7 +16,7 @@ class TestCast(TestCase):
     def test_cast_hard(self):
         """try smth very difficult"""
         the_type = List[Union[IPv4Address, IPv6Address]]
-        
+
         self.assertEqual(cast(["127.0.0.1", "fe80::"], the_type), 
                          [IPv4Address("127.0.0.1"), IPv6Address("fe80::")])
 

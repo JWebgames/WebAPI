@@ -10,8 +10,7 @@ from unittest import TestCase
 from uuid import uuid4
 
 import jwt as jwtlib
-from sanic import Sanic
-from sanic.exceptions import SanicException, InvalidUsage, ServerError
+from sanic.exceptions import InvalidUsage
 from sanic.response import json
 
 from ..config import webapi
@@ -94,14 +93,16 @@ def raise_sql_error(_req):
 @app.route("/tests/auth")
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
 @coroutine
-def require_auth(req, jwt):
+def require_auth(_req, jwt):
+    """Return the JWT"""
     return json(jwt)
 
 
 @app.route("/tests/admin_auth")
 @authenticate({ClientType.ADMIN})
 @coroutine
-def require_auth(req, jwt):
+def require_auth_admin(_req, jwt):
+    """Return the JWT"""
     return json(jwt)
 
 
@@ -146,7 +147,7 @@ class TestAuthenticate(TestCase):
             _, res = app.test_client.get("/tests/auth")
         self.assertEqual(res.json["error"], "Authorization header required")
         self.assertEqual(res.status, 401)
-    
+
     def test_no_bearer(self):
         """Authorization header is not Bearer"""
         with warnings.catch_warnings():
@@ -156,7 +157,7 @@ class TestAuthenticate(TestCase):
             })
         self.assertEqual(res.json["error"], "Bearer authorization type required")
         self.assertEqual(res.status, 401)
-    
+
     def test_expired_token(self):
         """Token is expirated (JWT:EXP)"""
         with warnings.catch_warnings():

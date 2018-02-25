@@ -21,6 +21,7 @@ logger = getLogger(__name__)
 
 
 class ClientType(Enum):
+    """Enum of JWT user type"""
     ADMIN = "admin"
     PLAYER = "player"
     GAME = "game"
@@ -36,9 +37,9 @@ def set_real_ip(req):
     if ip_address(req.ip) in webapi.REVERSE_PROXY_IPS:
         header_xff = req.headers.get("X-Forwarded-For")
         if header_xff is not None:
-            req.ip = eader_xff.split(", ", 1)[0]
+            req.ip = header_xff.split(", ", 1)[0]
             return
-        
+
         header_xri = req.headers.get("X-Real-IP")
         if header_xri is not None:
             req.ip = header_xri
@@ -70,9 +71,15 @@ def safe_sql(request, exception):
 
 
 def authenticate(allowed_client_types: set):
+    """Wrapper wrapper"""
     def authenticate_wrapper(func):
+        """Wrapper"""
         @wraps(func)
         async def authenticate_wrapped(req, *args, **kwargs):
+            """
+            Validate the JSON Web Token.
+            Call decorated function with the JWT as keyword
+            """
             bearer = req.headers.get("Authorization")
             if not bearer:
                 logger.warning(f"Authorization header is missing (IP: {req.ip})")
@@ -91,9 +98,10 @@ def authenticate(allowed_client_types: set):
             if await database.KVS.is_token_revoked(jwt["tid"]):
                 logger.log(45, f"Token has been revoked (IP: {req.ip})")
                 raise Forbidden("Revoked token")
-            
+
             if ClientType(jwt["typ"]) not in allowed_client_types:
-                logger.log(45, f"Restricted access: \"{jwt['typ']}\" not in {allowed_client_types} (IP: {req.ip})")
+                logger.log(45, 'Restricted access: "%s" not in {%s} (IP: %s)',
+                           jwt["typ"], ", ".join(allowed_client_types), req.ip)
                 raise Forbidden("Restricted access")
 
             return await func(req, *args, **kwargs, jwt=jwt)
@@ -102,11 +110,17 @@ def authenticate(allowed_client_types: set):
 
 
 def require_fields(fields: set):
+    """Wrapper wrapper"""
     def require_fields_wrapper(func):
+        """Wrapper"""
         @wraps(func)
         async def require_fields_wrapped(req, *args, **kwargs):
-            ct = req.headers.get("Content-Type")
-            if ct is None or "application/json" not in ct:
+            """
+            List JSON fields required.
+            Call decorated function with every json key as keyword
+            """
+            header_ct = req.headers.get("Content-Type")
+            if header_ct is None or "application/json" not in header_ct:
                 raise InvalidUsage("JSON required")
             if not fields:
                 pass
