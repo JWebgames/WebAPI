@@ -15,7 +15,7 @@ from sanic.response import json
 
 from ..config import webapi
 from ..server import app
-from ..middlewares import ClientType, authenticate
+from ..middlewares import ClientType, authenticate, require_fields
 
 logger = getLogger(__name__)
 
@@ -104,6 +104,13 @@ def require_auth(_req, jwt):
 def require_auth_admin(_req, jwt):
     """Return the JWT"""
     return json(jwt)
+
+@app.route("/tests/fields", methods=["POST"])
+@require_fields({"field1", "field2"})
+@coroutine
+def require_fields(_req, field1, field2):
+    """Return the fields"""
+    return json({"field1": field1, "field2": field2})
 
 
 class TestExceptions(TestCase):
@@ -195,7 +202,6 @@ class TestAuthenticate(TestCase):
             _, res = app.test_client.get("/tests/admin_auth", headers={
                 "Authorization": "Bearer: %s" % admin_jwt
             })
-        logger.debug(res.json)
         self.assertEqual(res.status, 200)
 
     def test_revoked_token(self):
@@ -215,3 +221,33 @@ class TestAuthenticate(TestCase):
             })
         self.assertEqual(res.json["error"], "Revoked token")
         self.assertEqual(res.status, 403)
+
+class TestRequireFields(TestCase):
+    def test_missing_all_fields(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            _, res = app.test_client.post("/tests/fields")
+        self.assertEqual(res.json["error"], "JSON required")
+        self.assertEqual(res.status, 400)
+
+    def test_missing_all_fields(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            _, res = app.test_client.post("/tests/fields", json={})
+        self.assertEqual(res.json["error"], "Fields {field1, field2} are missing")
+        self.assertEqual(res.status, 400)
+
+    def test_missing_all_fields(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            _, res = app.test_client.post("/tests/fields", json={"field1":""})
+        self.assertEqual(res.json["error"], r"Fields {field2} are missing")
+        self.assertEqual(res.status, 400)
+
+    def test_all_fields_ok(self):
+        data = {"field1": "", "field2": ""}
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            _, res = app.test_client.post("/tests/fields", json=data)
+        self.assertEqual(res.json, data)
+        self.assertEqual(res.status, 200)

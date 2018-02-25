@@ -126,11 +126,13 @@ def require_fields(fields: set):
                 pass
             if not isinstance(req.json, dict):
                 raise InvalidUsage("JSON object required")
+            
+            template = "Fields {{{}}} are missing"
             if not req.json:
-                raise InvalidUsage(f"Fields {fields} are missing")
+                raise InvalidUsage(template.format(", ".join(fields)))
             missings = fields - req.json.keys()
             if missings:
-                raise InvalidUsage(f"Fields {missings} are missing")
+                raise InvalidUsage(template.format(", ".join(missings)))
             return await func(req, *args, **req.json, **kwargs)
         return require_fields_wrapped
     return require_fields_wrapper
