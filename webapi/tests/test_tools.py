@@ -14,12 +14,12 @@ class TestCast(TestCase):
         """try casting str to int"""
         self.assertEqual(cast("5", int), 5)
 
-    def test_cast_hard(selg):
+    def test_cast_hard(self):
         """try smth very difficult"""
-        the_type = List[Union[IPV4Address, IPV6Address]]
+        the_type = List[Union[IPv4Address, IPv6Address]]
         
         self.assertEqual(cast(["127.0.0.1", "fe80::"], the_type), 
-                         [IPV4Address("127.0.0.1"), IPV6Address("fe80::")])
+                         [IPv4Address("127.0.0.1"), IPv6Address("fe80::")])
 
 class TestDelayLogFor(TestCase):
     """Test case for tools.DelayLogFor"""
