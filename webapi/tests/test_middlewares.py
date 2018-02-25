@@ -7,15 +7,14 @@ from logging import getLogger
 from secrets import token_urlsafe
 from sqlite3 import IntegrityError
 from unittest import TestCase
-from uuid import uuid4
 
-import jwt as jwtlib
 from sanic.exceptions import InvalidUsage
 from sanic.response import json
 
+from ..tools import generate_token
 from ..config import webapi
 from ..server import app
-from ..middlewares import ClientType, authenticate
+from ..middlewares import ClientType, authenticate, require_fields
 
 logger = getLogger(__name__)
 
@@ -23,60 +22,12 @@ ERROR_MESSAGE_1 = token_urlsafe(16)
 ERROR_MESSAGE_2 = token_urlsafe(16)
 NOW = datetime.utcnow()
 
-player_id = uuid4()
-player_jwt_payload = {
-    "iss": ClientType.WEBAPI.value,
-    "sub": "webgames",
-    "iat": NOW,
-    "exp": NOW + timedelta(minutes=5),
-    "tid": str(uuid4()),
-    "typ": ClientType.PLAYER.value,
-    "uid": str(player_id)
-}
-player_jwt = jwtlib.encode(player_jwt_payload, webapi.JWT_SECRET).decode()
-
-admin_id = uuid4()
-admin_jwt_payload = {
-    "iss": ClientType.WEBAPI.value,
-    "sub": "webgames",
-    "iat": NOW,
-    "exp": NOW + timedelta(minutes=5),
-    "tid": str(uuid4()),
-    "typ": ClientType.ADMIN.value,
-    "uid": str(admin_id)
-}
-admin_jwt = jwtlib.encode(admin_jwt_payload, webapi.JWT_SECRET).decode()
-
-revoked_jwt = jwtlib.encode({
-    "iss": ClientType.WEBAPI.value,
-    "sub": "webgames",
-    "iat": NOW,
-    "exp": NOW + timedelta(minutes=5),
-    "tid": str(uuid4()),
-    "typ": ClientType.PLAYER.value,
-    "uid": str(uuid4())
-}, webapi.JWT_SECRET).decode()
-
-expired_jwt = jwtlib.encode({
-    "iss": ClientType.WEBAPI.value,
-    "sub": "webgames",
-    "iat": NOW - timedelta(hours=24),
-    "exp": NOW - timedelta(hours=12),
-    "tid": str(uuid4()),
-    "typ": ClientType.PLAYER.value,
-    "uid": str(uuid4())
-}, webapi.JWT_SECRET).decode()
-
-wrong_key_jwt = jwtlib.encode({
-    "iss": ClientType.WEBAPI.value,
-    "sub": "webgames",
-    "iat": NOW,
-    "exp": NOW + timedelta(minutes=5),
-    "tid": str(uuid4()),
-    "typ": ClientType.PLAYER.value,
-    "uid": str(uuid4())
-}, "wrong-super-secret-password").decode()
-
+PLAYER_JWT = generate_token(webapi.JWT_SECRET)
+ADMIN_JWT = generate_token(webapi.JWT_SECRET, typ=ClientType.ADMIN.value)
+REVOKED_JWT = generate_token(webapi.JWT_SECRET)
+EXPIRED_JWT = generate_token(webapi.JWT_SECRET,
+                             iat=datetime.utcnow() - timedelta(hours=24))
+WRONG_KEY_JWT = generate_token("wrong-super-secret-password")
 
 @app.route("/tests/http_error")
 def raise_http_error(_req):
@@ -94,16 +45,23 @@ def raise_sql_error(_req):
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
 @coroutine
 def require_auth(_req, jwt):
-    """Return the JWT"""
-    return json(jwt)
+    """Return an empty json, require authentication"""
+    return json({})
 
 
 @app.route("/tests/admin_auth")
 @authenticate({ClientType.ADMIN})
 @coroutine
 def require_auth_admin(_req, jwt):
-    """Return the JWT"""
-    return json(jwt)
+    """Return an empty json, require admin authentication"""
+    return json({})
+
+@app.route("/tests/fields", methods=["POST"])
+@require_fields({"field1", "field2"})
+@coroutine
+def route_require_fields(_req, field1, field2):
+    """Return the fields"""
+    return json({"field1": field1, "field2": field2})
 
 
 class TestExceptions(TestCase):
@@ -135,9 +93,8 @@ class TestAuthenticate(TestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             _, res = app.test_client.get("/tests/auth", headers={
-                "Authorization": "Bearer: %s" % player_jwt
+                "Authorization": "Bearer: %s" % PLAYER_JWT
             })
-        self.assertEqual(res.json, player_jwt_payload)
         self.assertEqual(res.status, 200)
 
     def test_no_authorization_header(self):
@@ -153,7 +110,7 @@ class TestAuthenticate(TestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             _, res = app.test_client.get("/tests/auth", headers={
-                "Authorization": player_jwt
+                "Authorization": PLAYER_JWT
             })
         self.assertEqual(res.json["error"], "Bearer authorization type required")
         self.assertEqual(res.status, 401)
@@ -163,7 +120,7 @@ class TestAuthenticate(TestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             _, res = app.test_client.get("/tests/auth", headers={
-                "Authorization": "Bearer: %s" % expired_jwt
+                "Authorization": "Bearer: %s" % EXPIRED_JWT
             })
         self.assertEqual(res.json["error"], "Invalid token")
         self.assertEqual(res.status, 403)
@@ -173,7 +130,7 @@ class TestAuthenticate(TestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             _, res = app.test_client.get("/tests/auth", headers={
-                "Authorization": "Bearer: %s" % wrong_key_jwt
+                "Authorization": "Bearer: %s" % WRONG_KEY_JWT
             })
         self.assertEqual(res.json["error"], "Invalid token")
         self.assertEqual(res.status, 403)
@@ -183,7 +140,7 @@ class TestAuthenticate(TestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             _, res = app.test_client.get("/tests/admin_auth", headers={
-                "Authorization": "Bearer: %s" % player_jwt
+                "Authorization": "Bearer: %s" % PLAYER_JWT
             })
         self.assertEqual(res.json["error"], "Restricted access")
         self.assertEqual(res.status, 403)
@@ -193,9 +150,8 @@ class TestAuthenticate(TestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             _, res = app.test_client.get("/tests/admin_auth", headers={
-                "Authorization": "Bearer: %s" % admin_jwt
+                "Authorization": "Bearer: %s" % ADMIN_JWT
             })
-        logger.debug(res.json)
         self.assertEqual(res.status, 200)
 
     def test_revoked_token(self):
@@ -203,15 +159,53 @@ class TestAuthenticate(TestCase):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             _, res = app.test_client.get("/v1/auth/logout", headers={
-                "Authorization": "Bearer: %s" % revoked_jwt
+                "Authorization": "Bearer: %s" % REVOKED_JWT
             })
-        logger.debug(res.json)
         self.assertEqual(res.status, 200)
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             _, res = app.test_client.get("/tests/auth", headers={
-                "Authorization": "Bearer: %s" % revoked_jwt
+                "Authorization": "Bearer: %s" % REVOKED_JWT
             })
         self.assertEqual(res.json["error"], "Revoked token")
         self.assertEqual(res.status, 403)
+
+class TestRequireFields(TestCase):
+    """Test middlewares.require_fields"""
+    def test_missing_paylod(self):
+        """No payload"""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            _, res = app.test_client.post("/tests/fields")
+        self.assertEqual(res.json["error"], "JSON required")
+        self.assertEqual(res.status, 400)
+
+    def test_missing_all_fields(self):
+        """Empty object"""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            _, res = app.test_client.post("/tests/fields", json={})
+
+        if res.json["error"] != "Fields {field1, field2} are missing"\
+           and res.json["error"] != "Fields {field2, field1} are missing":
+            self.assertEqual(res.json["error"], "Fields {field1, field2} are missing")
+
+        self.assertEqual(res.status, 400)
+
+    def test_missing_some_fields(self):
+        """Missing fields"""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            _, res = app.test_client.post("/tests/fields", json={"field1":""})
+        self.assertEqual(res.json["error"], r"Fields {field2} are missing")
+        self.assertEqual(res.status, 400)
+
+    def test_all_fields_ok(self):
+        """All fields presents"""
+        data = {"field1": "", "field2": ""}
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            _, res = app.test_client.post("/tests/fields", json=data)
+        self.assertEqual(res.json, data)
+        self.assertEqual(res.status, 200)
