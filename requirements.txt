@@ -5,8 +5,10 @@ asyncpg==0.15.0
 hiredis==0.2.0
 httptools==0.0.10
 PyJWT==1.5.3
+pytimeparse==1.1.7
 PyYAML==3.12
 sanic==0.7.0
+scrypt==0.8.6
 ujson==1.35
 uvloop==0.9.1
 websockets==4.0.1

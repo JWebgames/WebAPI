@@ -12,7 +12,9 @@ setup(name='webapi',
           "aioredis",
           "asyncpg",
           "pyjwt",
+          "pytimeparse",
           "PyYAML",
-          "sanic"
+          "sanic",
+          "scrypt"
       ],
       zip_safe=False)

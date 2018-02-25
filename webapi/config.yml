@@ -12,8 +12,13 @@ redis:
   DATABASE: null
   PASSWORD: null
 webapi:
-  PRODUCTION: true
+  PRODUCTION: no
   HOST: localhost
   PORT: 22548
   LOG_LEVEL: WARNING
   JWT_SECRET: super-secret-password
+  JWT_EXPIRATION_TIME: 12h
+  REVERSE_PROXY_IPS: 
+    - 127.0.0.1
+    - ff00::80
+

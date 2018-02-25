@@ -4,6 +4,9 @@ python:
 install:
   - pip install -r requirements.txt
   - pip install pylint coverage codecov aiohttp
+env:
+  WEBAPI_ROOT=$PWD/webapi
+  WEBAPI_PRODUCTION=False
 script: 
   - python -m unittest -v
   - python -m webapi dryrun

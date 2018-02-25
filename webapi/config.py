@@ -5,19 +5,21 @@ Load and parse the configuration given by multiple sources and expose
 them in one merged NamedTuple per configuration block
 """
 
+import ipaddress
 from argparse import ArgumentParser
-from collections import ChainMap, namedtuple, defaultdict
+from collections import ChainMap, namedtuple, defaultdict, Iterable
 from logging import getLogger
 from operator import attrgetter, methodcaller
 from os import environ
 from sys import argv
-from typing import NamedTuple, Optional, Dict, List, Tuple, Any, NewType
+from typing import NamedTuple, Optional, Union, Dict, List, Tuple, Any, NewType
+
 from yaml import safe_load as yaml_load, dump as yaml_dump
 
 from .exceptions import ConfigOptionTypeError,\
                         ConfigUnknownOptionError,\
                         ConfigMissingOptionError
-from .tools import cast, real_type, get_package_path, find
+from .tools import cast, get_package_path, find
 
 logger = getLogger(__name__)
 
@@ -26,9 +28,11 @@ Triple = namedtuple("Triple", ["name", "prefix", "block"])
 triples = []
 def register(name, prefix=None):
     """Set name and prefix for a config block"""
+    if prefix is None:
+        prefix = name.upper() + "_"
     def wrapped(block):
         """Register a config block withe its name and prefix"""
-        triples.append(Triple(name, prefix if prefix else name.upper(), block))
+        triples.append(Triple(name, prefix, block))
         return block
     return wrapped
 
@@ -40,12 +44,14 @@ class WebAPIConfig(NamedTuple):
     HOST: str = "localhost"
     PORT: int = 22548
     JWT_SECRET: str = "super-secret-password"
+    JWT_EXPIRATION_TIME: str = "12h"
     LOG_LEVEL: str = "WARNING"
     PRODUCTION: bool = False
+    REVERSE_PROXY_IPS: Optional[List[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]]] = None
 
 
 postgres: "PostgresConfig"
-@register("postgres")
+@register("postgres", "PG")
 class PostgresConfig(NamedTuple):
     """Postgres configuration block"""
     DSN: Optional[str] = None
@@ -70,7 +76,7 @@ class RedisConfig(NamedTuple):
 def safe_assign(source: Source, block: NamedTuple,
                 blockname: str, field: str, value: Any) -> None:
     """Cast the value and store the result in the source"""
-    source[blockname][field] = cast(block._field_types[field], value)
+    source[blockname][field] = cast(value, block._field_types[field])
 
 
 def get_default():
@@ -88,7 +94,6 @@ def get_from_cli():
         name_lower = name.lower()
         for key in block._fields:
             parser.add_argument("--%s_%s" % (name_lower, key.lower()),
-                                type=real_type(block._field_types[key]),
                                 action="store")
     cli = parser.parse_args(argv[2:])
 
@@ -113,7 +118,7 @@ def get_from_env():
     environ_config = defaultdict(dict)
     for name, prefix, block in triples:
         for field in block._fields:
-            value = environ.get(prefix + field)
+            value = environ.get(prefix.upper() + field)
             if value:
                 safe_assign(environ_config, block, name, field, value)
 
@@ -145,15 +150,25 @@ def load_all_sources() -> List[dict]:
 def validate(name: str, block: NamedTuple, config: dict) -> None:
     """Look for invalid value type and missing/unknow fields"""
 
+    composite_classes = [Union.__class__, List.__class__, Tuple.__class__]
     for key, value in config.items():
         if key not in block._fields:
             raise ConfigUnknownOptionError(key, name)
 
-        if "Union" in repr(block._field_types[key]):
-            types = block._field_types[key].__args__
-        else:
-            types = block._field_types[key]
-        if not isinstance(value, types):
+        # Extract types from composite types (deep)
+        types = [block._field_types[key]]
+        while True:
+            if types[-1].__class__ in composite_classes:
+                types.extend(reversed(types[-1].__args__))
+            else:
+                break
+        types = [typ for typ in types
+                     if typ.__class__ not in composite_classes]
+        
+        if isinstance(value, list):
+            value = value[0]
+
+        if not isinstance(value, tuple(types)):
             raise ConfigOptionTypeError(key, name, types, type(value))
 
     missings = set(block._fields) - config.keys()
@@ -177,8 +192,8 @@ def expose_block(name: str, block: NamedTuple) -> None:
 def expose_default() -> None:
     """Expose the default configuration"""
     default_config = get_default()
-    for name, *_ in triples:
-        expose_block(name, default_config[name])
+    for name, _, block in triples:
+        expose_block(name, block(**default_config[name]))
 
 
 def load_merge_validate_expose() -> None:
@@ -198,16 +213,25 @@ def show() -> None:
 
     # Show configuration from each source
     cli, env, yml = load_all_sources()
-    print(cli, env, yml)
     for sourcename, source in [("cli", cli), ("env", env), ("yml", yml)]:
         for blockname, block in source.items():
             print("+{!s:-^63}+".format("{}:{}".format(sourcename, blockname)))
             for key, value in block.items():
-                print("| {!s:<30}|{!s:>30} |".format(key, value))
+                if not isinstance(value, str) and isinstance(value, Iterable):
+                    print("| {!s:<30}|{!s:>30} |".format(key, value[0]))
+                    for element in value[1:]:
+                        print("|{}|{!s:>30} |".format(" " * 31, element))
+                else:
+                    print("| {!s:<30}|{!s:>30} |".format(key, value))
 
     # Show merge and validated configuration
     for name, block in merge_sources(cli, env, yml):
         print("+{:-^63}+".format("Merged:" + name))
         for key, value in block._asdict().items():
-            print("| {!s:<30}|{!s:>30} |".format(key, value))
+            if not isinstance(value, str) and isinstance(value, Iterable):
+                print("| {!s:<30}|{!s:>30} |".format(key, value[0]))
+                for element in value[1:]:
+                    print("|{}|{!s:>30} |".format(" " * 31, element))
+            else:
+                print("| {!s:<30}|{!s:>30} |".format(key, value))
     print("+{}+".format("-" * 63))

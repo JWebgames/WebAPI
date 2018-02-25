@@ -1,10 +1,13 @@
 """Several tools used accross by other modules"""
 
 import logging
-from logging.handlers import BufferingHandler
-from pathlib import Path
 import sys
-from typing import Union, Optional
+from asyncio import coroutine
+from functools import partial, wraps
+from logging.handlers import BufferingHandler
+from os import environ
+from pathlib import Path
+from typing import Union, Optional, List
 
 logger = logging.getLogger(__name__)
 
@@ -15,9 +18,36 @@ def find(func, iteratee):
             return value
     return None
 
-def cast(typ, val):
+def cast(val, typ, *types):
     """Cast a value to the given type. /!\\ Hack /!\\"""
-    return real_type(typ)(val)
+
+    # get Optional
+    if typ.__class__ in [Union.__class__, Optional.__class__] \
+       and len(typ.__args__) == 2 \
+       and typ.__args__[1].__class__ == None.__class__:
+        typ = typ.__args__[0]
+
+    # split Unions
+    elif typ.__class__ == Union.__class__:
+        return cast(val, *typ.__args__)
+    
+    # consume List
+    if typ.__class__ == List.__class__:
+        values = []
+        for element in val:
+            values.append(cast(element, typ.__args__[0]))
+        return values
+    
+    # cast
+    types = list(types) + [typ]
+    for typ in types:
+        try:
+            return typ(val)
+        except:
+            continue
+    else:
+        raise TypeError("{} not castable in any of {{{}}}.".format(typ, types))
+    
 
 
 def real_type(typ):
@@ -29,6 +59,9 @@ def real_type(typ):
 
 def get_package_path():
     """Return the path of the package root"""
+    root = environ.get("WEBAPI_ROOT")
+    if root:
+        return Path(root)
     return Path(sys.modules['__main__'].__file__).parent
 
 

@@ -10,7 +10,8 @@ from .tools import DelayLogFor
 def start():
     """Let's go !"""
     cmdparser = ArgumentParser()
-    cmdparser.add_argument("command", choices=["run", "dryrun", "showconfig", "exportconfig"])
+    cmdparser.add_argument("command", choices=[
+        "run", "dryrun", "showconfig", "exportconfig"])
     command = cmdparser.parse_args(argv[1:2]).command
 
     if command in ["showconfig", "exportconfig"]:
