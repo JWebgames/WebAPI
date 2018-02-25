@@ -5,14 +5,15 @@ Load and parse the configuration given by multiple sources and expose
 them in one merged NamedTuple per configuration block
 """
 
+import ipaddress
 from argparse import ArgumentParser
 from collections import ChainMap, namedtuple, defaultdict, Iterable
-import ipaddress
 from logging import getLogger
 from operator import attrgetter, methodcaller
 from os import environ
 from sys import argv
 from typing import NamedTuple, Optional, Union, Dict, List, Tuple, Any, NewType
+
 from yaml import safe_load as yaml_load, dump as yaml_dump
 
 from .exceptions import ConfigOptionTypeError,\
@@ -43,6 +44,7 @@ class WebAPIConfig(NamedTuple):
     HOST: str = "localhost"
     PORT: int = 22548
     JWT_SECRET: str = "super-secret-password"
+    JWT_EXPIRATION_TIME: str = "12h"
     LOG_LEVEL: str = "WARNING"
     PRODUCTION: bool = False
     REVERSE_PROXY_IPS: Optional[List[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]]] = None
