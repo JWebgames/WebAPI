@@ -1,9 +1,12 @@
 """Several tools used accross by other modules"""
 
 import logging
-from logging.handlers import BufferingHandler
-from pathlib import Path
 import sys
+from asyncio import coroutine
+from functools import partial, wraps
+from logging.handlers import BufferingHandler
+from os import environ
+from pathlib import Path
 from typing import Union, Optional, List
 
 logger = logging.getLogger(__name__)
@@ -56,6 +59,9 @@ def real_type(typ):
 
 def get_package_path():
     """Return the path of the package root"""
+    root = environ.get("WEBAPI_ROOT")
+    if root:
+        return Path(root)
     return Path(sys.modules['__main__'].__file__).parent
 
 
