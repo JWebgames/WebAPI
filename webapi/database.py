@@ -29,6 +29,12 @@ class Postgres(RelationalDataBase):
     def __init__(self, pgconn):
         self.conn = pgconn
 
+    async def get_user_by_login(self, login):
+        raise NotImplementedError()
+
+    async def grant_admin(self, userid):
+        raise NotImplementedError()
+
 
 class SQLite(RelationalDataBase):
     """Implementation database-free"""
@@ -88,6 +94,12 @@ class Redis(KeyValueStore):
     """Implementation for Redis"""
     def __init__(self, redis_conn):
         self.conn = redis_conn
+
+    def revoke_token(self, token_id) -> None:
+        raise NotImplementedError()
+
+    def is_token_revoked(self, token_id) -> bool:
+        raise NotImplementedError()
 
 
 class InMemory(KeyValueStore):

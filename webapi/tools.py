@@ -2,10 +2,13 @@
 
 import logging
 import sys
+from datetime import datetime, timedelta
 from logging.handlers import BufferingHandler
 from os import environ
 from pathlib import Path
 from typing import Union, Optional, List
+from uuid import uuid4
+import jwt as jwtlib
 
 logger = logging.getLogger(__name__)
 
@@ -94,3 +97,22 @@ class DelayLogFor(BufferingHandler):
         self.delayed_logger.removeHandler(self)
         self.delayed_logger.handlers.extend(self.delayed_handlers)
         self.close()
+
+def generate_token(key, iat=None, exp_delta=timedelta(minutes=5), typ="player",
+                   uid="00000000-0000-0000-0000-000000000000"):
+    """Generate a JSON Web Token"""
+    if iat is None:
+        iat = datetime.utcnow()
+
+    if uid is None:
+        uid = uuid4()
+
+    return jwtlib.encode({
+        "iss": "webapi",
+        "sub": "webgames",
+        "iat": iat,
+        "exp": iat + exp_delta,
+        "tid": str(uuid4()),
+        "typ": typ,
+        "uid": uid
+    }, key).decode()

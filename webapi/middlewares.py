@@ -126,7 +126,7 @@ def require_fields(fields: set):
                 pass
             if not isinstance(req.json, dict):
                 raise InvalidUsage("JSON object required")
-            
+
             template = "Fields {{{}}} are missing"
             if not req.json:
                 raise InvalidUsage(template.format(", ".join(fields)))

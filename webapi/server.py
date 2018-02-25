@@ -26,7 +26,7 @@ async def setup_postgres(_, loop):
     )
     database.RDB = database.Postgres(postgres)
     logger.info("Connection to postgres established.")
-    
+ 
 
 async def setup_redis(_, loop):
     """Connect to redis and expose the connection object"""
