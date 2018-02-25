@@ -163,8 +163,8 @@ def validate(name: str, block: NamedTuple, config: dict) -> None:
             else:
                 break
         types = [typ for typ in types
-                     if typ.__class__ not in composite_classes]
-        
+                 if typ.__class__ not in composite_classes]
+
         if isinstance(value, list):
             value = value[0]
 
