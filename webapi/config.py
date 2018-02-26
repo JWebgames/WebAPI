@@ -8,9 +8,9 @@ them in one merged NamedTuple per configuration block
 import ipaddress
 from argparse import ArgumentParser
 from collections import ChainMap, namedtuple, defaultdict, Iterable
-from logging import getLogger
 from operator import attrgetter, methodcaller
 from os import environ
+from pathlib import Path
 from sys import argv
 from typing import NamedTuple, Optional, Union, Dict, List, Tuple, Any, NewType
 
@@ -19,9 +19,7 @@ from yaml import safe_load as yaml_load, dump as yaml_dump
 from .exceptions import ConfigOptionTypeError,\
                         ConfigUnknownOptionError,\
                         ConfigMissingOptionError
-from .tools import cast, get_package_path, find
-
-logger = getLogger(__name__)
+from .tools import cast, root, find
 
 Source = NewType("Source", Dict[str, Dict[str, Any]])
 Triple = namedtuple("Triple", ["name", "prefix", "block"])
@@ -90,6 +88,7 @@ def get_from_cli():
     parser = ArgumentParser(prog="{} {}".format(argv[0], argv[1]),
                             description="Webgames Web API for managing games",
                             argument_default=sentinel)
+    parser.add_argument("--config")
     for name, _, block in triples:
         name_lower = name.lower()
         for key in block._fields:
@@ -127,7 +126,7 @@ def get_from_env():
 
 def get_from_yml():
     """Get the configuration from the YAML configuration file"""
-    with get_package_path().joinpath("config.yml").open() as yaml_file:
+    with Path(root()).joinpath("config.yml").open() as yaml_file:
         yaml_config = yaml_load(yaml_file)
 
     for name, _, block in triples:
@@ -226,7 +225,7 @@ def show() -> None:
 
     # Show merge and validated configuration
     for name, block in merge_sources(cli, env, yml):
-        print("+{:-^63}+".format("Merged:" + name))
+        print("+{:-^63}+".format("merged:" + name))
         for key, value in block._asdict().items():
             if not isinstance(value, str) and isinstance(value, Iterable):
                 print("| {!s:<30}|{!s:>30} |".format(key, value[0]))

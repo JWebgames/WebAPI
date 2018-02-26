@@ -15,7 +15,6 @@ def start():
     command = cmdparser.parse_args(argv[1:2]).command
 
     if command in ["showconfig", "exportconfig"]:
-        logging.root.level = logging.FATAL
         if command == "showconfig":
             config.show()
         elif command == "exportconfig":
