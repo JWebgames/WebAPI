@@ -144,7 +144,6 @@ class ConfigIntegrationTest(TestCase):
         python_path = which.stdout.read().strip()
         which.stdout.close()
 
-
         command = [
             python_path,
             "-m",
@@ -157,6 +156,7 @@ class ConfigIntegrationTest(TestCase):
         ]
         process = Popen(command, env=env, stdout=PIPE)
         process.wait()
+        move("/tmp/webagmes_webapi_config.yml", config_path)
         process_output = process.stdout.read().decode()
         process.stdout.close()
         self.assertEqual(process.returncode, 0)
