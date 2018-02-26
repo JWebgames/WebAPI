@@ -1,20 +1,22 @@
 """Test runner for config module"""
 
 import warnings
-from asyncio import coroutine
+from asyncio import coroutine, get_event_loop
 from datetime import datetime, timedelta
 from logging import getLogger
 from secrets import token_urlsafe
 from sqlite3 import IntegrityError
 from unittest import TestCase
+from uuid import uuid4
 
 from sanic.exceptions import InvalidUsage
 from sanic.response import json
 
-from ..tools import generate_token
-from ..config import webapi
-from ..server import app
-from ..middlewares import ClientType, authenticate, require_fields
+from webapi import database
+from webapi.tools import generate_token
+from webapi.config import webapi
+from webapi.server import app
+from webapi.middlewares import ClientType, authenticate, require_fields
 
 logger = getLogger(__name__)
 
@@ -24,10 +26,12 @@ NOW = datetime.utcnow()
 
 PLAYER_JWT = generate_token(webapi.JWT_SECRET)
 ADMIN_JWT = generate_token(webapi.JWT_SECRET, typ=ClientType.ADMIN.value)
-REVOKED_JWT = generate_token(webapi.JWT_SECRET)
 EXPIRED_JWT = generate_token(webapi.JWT_SECRET,
                              iat=datetime.utcnow() - timedelta(hours=24))
 WRONG_KEY_JWT = generate_token("wrong-super-secret-password")
+REVOKED_TID = str(uuid4())
+REVOKED_JWT = generate_token(webapi.JWT_SECRET, tid=REVOKED_TID)
+get_event_loop().run_until_complete(database.KVS.revoke_token(REVOKED_TID))
 
 @app.route("/tests/http_error")
 def raise_http_error(_req):
@@ -67,7 +71,7 @@ def route_require_fields(_req, field1, field2):
 class TestExceptions(TestCase):
     """Test case for middlewares.(safe_http|safe_sql)"""
     def test_safe_http(self):
-        """Test against SanicException"""
+        """Test safe_http against SanicException"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             _, res = app.test_client.get("/tests/http_error")
@@ -77,7 +81,7 @@ class TestExceptions(TestCase):
         self.assertEqual(res.json["error"], ERROR_MESSAGE_1)
 
     def test_safe_sql(self):
-        """Test against IntegrityConstraintViolationError"""
+        """Test safe_sql against IntegrityConstraintViolationError"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             _, res = app.test_client.get("/tests/sql_error")
@@ -98,7 +102,7 @@ class TestAuthenticate(TestCase):
         self.assertEqual(res.status, 200)
 
     def test_no_authorization_header(self):
-        """Authorization header is missing"""
+        """Fail if authorization header is missing"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             _, res = app.test_client.get("/tests/auth")
@@ -106,7 +110,7 @@ class TestAuthenticate(TestCase):
         self.assertEqual(res.status, 401)
 
     def test_no_bearer(self):
-        """Authorization header is not Bearer"""
+        """Fail if authorization header is not Bearer"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             _, res = app.test_client.get("/tests/auth", headers={
@@ -116,7 +120,7 @@ class TestAuthenticate(TestCase):
         self.assertEqual(res.status, 401)
 
     def test_expired_token(self):
-        """Token is expirated (JWT:EXP)"""
+        """Fail if token is expirated (JWT:EXP)"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             _, res = app.test_client.get("/tests/auth", headers={
@@ -126,7 +130,7 @@ class TestAuthenticate(TestCase):
         self.assertEqual(res.status, 403)
 
     def test_wrong_key(self):
-        """Token is signed with a wrong key"""
+        """Fail if the token is signed with a wrong key"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             _, res = app.test_client.get("/tests/auth", headers={
@@ -136,7 +140,7 @@ class TestAuthenticate(TestCase):
         self.assertEqual(res.status, 403)
 
     def test_restricted_access_deny(self):
-        """Access is restricted to Admin. Player try to access"""
+        """Fail if access is restricted"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             _, res = app.test_client.get("/tests/admin_auth", headers={
@@ -146,7 +150,7 @@ class TestAuthenticate(TestCase):
         self.assertEqual(res.status, 403)
 
     def test_restricted_access_grant(self):
-        """Access is restricted to Admin. Admin try to access"""
+        """Pass if access is not restricted"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             _, res = app.test_client.get("/tests/admin_auth", headers={
@@ -155,21 +159,14 @@ class TestAuthenticate(TestCase):
         self.assertEqual(res.status, 200)
 
     def test_revoked_token(self):
-        """Player try to connect after a logout"""
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            _, res = app.test_client.get("/v1/auth/logout", headers={
-                "Authorization": "Bearer: %s" % REVOKED_JWT
-            })
-        self.assertEqual(res.status, 200)
-
+        """Fail if the token is revoked"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             _, res = app.test_client.get("/tests/auth", headers={
                 "Authorization": "Bearer: %s" % REVOKED_JWT
             })
-        self.assertEqual(res.json["error"], "Revoked token")
         self.assertEqual(res.status, 403)
+        self.assertEqual(res.json["error"], "Revoked token")
 
 class TestRequireFields(TestCase):
     """Test middlewares.require_fields"""
