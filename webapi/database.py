@@ -3,7 +3,8 @@
 import sqlite3
 from asyncio import coroutine
 from os import listdir
-from .tools import get_package_path
+from pathlib import Path
+from .tools import root
 
 
 RDB: "RelationalDataBase"
@@ -39,14 +40,14 @@ class Postgres(RelationalDataBase):
 class SQLite(RelationalDataBase):
     """Implementation database-free"""
     def __init__(self):
-        dbfile = str(get_package_path().joinpath("data.sqlite3"))
+        dbfile = str(Path(root()).joinpath("data.sqlite3"))
         self.conn = sqlite3.connect(dbfile)
         self.queries = {}
 
         cur = self.conn.cursor()
-        root = get_package_path().joinpath("sql_queries", "sqlite")
-        for filename in listdir(str(root)):
-            with root.joinpath(filename).open() as file:
+        dir_ = Path(root()).joinpath("sql_queries", "sqlite")
+        for filename in listdir(str(dir_)):
+            with dir_.joinpath(filename).open() as file:
                 sql = file.read()
                 if filename.startswith("create_table"):
                     cur.execute(sql)
