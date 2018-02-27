@@ -19,7 +19,7 @@ after_success:
   - curl -v -m 30 -X POST -F pylint-report=@/tmp/pylint-report https://pylint.julien00859.be/reports
   - python setup.py bdist_wheel
   - pip install twine
-  - echo [pypi] > $HOME/.pypirc
-  - echo username = Julien00859 >> $HOME/.pyirc
-  - echo password = $PYPI_PWD >> $HOME/.pyirc
+  - echo "[pypi]" > $HOME/.pypirc
+  - echo username = Julien00859 >> $HOME/.pypirc
+  - echo password = $PYPI_PWD >> $HOME/.pypirc
   - twine upload dist/*
