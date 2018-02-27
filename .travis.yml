@@ -2,8 +2,9 @@ language: python
 python:
   - "3.6"
 install:
-  - pip install -r requirements.txt
-  - pip install pylint coverage codecov aiohttp
+  - apt install libyaml
+  - python setup.py install
+  - pip install -r requirements_test.txt
 env:
   WEBAPI_ROOT=$PWD/webapi
   WEBAPI_PRODUCTION=False
@@ -15,3 +16,9 @@ after_success:
   - codecov
   - pylint webapi --reports=y --const-naming-style=any > /tmp/pylint-report
   - curl -v -m 30 -X POST -F pylint-report=@/tmp/pylint-report https://pylint.julien00859.be/reports
+  - python setup.py bdist_wheel
+  - pip install twine
+  - echo [pypi] > $HOME/.pypirc
+  - echo username = Julien008 >> $HOME/.pyirc
+  - echo password = $PYPI_PWD >> $HOME/.pyirc
+  - twine upload dist/*
