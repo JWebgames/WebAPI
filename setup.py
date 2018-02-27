@@ -19,7 +19,6 @@ setup(
         'Development Status :: 2 - Pre-Alpha',
         'Environment :: Console',
         'Framework :: AsyncIO',
-        'Framework :: Sanic',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: MIT License',
         'Operating System :: POSIX :: Linux',
