@@ -2,7 +2,7 @@ language: python
 python:
   - "3.6"
 before_install:
-  - sudo apt install libyaml 
+  - sudo apt install libyaml-dev
 install:
   - python setup.py install
   - pip install -r requirements_test.txt
