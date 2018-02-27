@@ -20,6 +20,6 @@ after_success:
   - python setup.py bdist_wheel
   - pip install twine
   - echo [pypi] > $HOME/.pypirc
-  - echo username = Julien008 >> $HOME/.pyirc
+  - echo username = Julien00859 >> $HOME/.pyirc
   - echo password = $PYPI_PWD >> $HOME/.pyirc
   - twine upload dist/*
