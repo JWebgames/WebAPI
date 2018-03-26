@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS tbuser (
+CREATE TABLE IF NOT EXISTS tbusers (
     userid BLOB NOT NULL,
     name TEXT NOT NULL,
     email TEXT NOT NULL,

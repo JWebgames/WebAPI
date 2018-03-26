@@ -3,10 +3,13 @@
 
 import types
 from sqlite3 import connect as sqlite3_connect
-from asyncio import sleep, gather
+from asyncio import sleep, gather, get_event_loop
+from pathlib import Path
 from os import listdir
-from ..tools import get_package_path
+from os.path import join as pathjoin
+from ..tools import root
 from collections import namedtuple
+from itertools import starmap
 
 RDB: "RelationalDataBase"
 KVS: "KeyValueStore"
@@ -62,40 +65,48 @@ class Postgres(RelationalDataBase):
     """Implementation for postgres"""
     def __init__(self, pgconn):
 
-        async def wrap(self, name, argscnt):
+        async def wrap(name, argscnt):
             """Cache the prepated statement"""
-            query = await conn.prepare("SELECT %s($%s)" % (name, ", $".join(range(1, argscnt + 1))))
+            args = ", $".join(range(1, argscnt + 1))
+            query = await pgconn.prepare("SELECT %s($%s)" % (name, args))
             async def wrapped(*args):
                 """Do the database call"""
                 return await query.fetch(*args)
             return name, wrapped
 
-        for name, wrapped in gather(list(map(lambda (name, argscnt): wrap(pgconn, name, argscnt), [
-            ("create_user", 4),
-            ("get_user_by_id", 1),
-            ("get_user_by_login", 1),
-            ("set_user_admin", 1),
-            ("set_user_verified", 1),
-            ("create_game", 2),
-            ("get_game_by_id", 1),
-            ("get_game_by_name", 1),
-            ("get_games_by_owner", 1),
-            ("set_game_owner", 1),
-            ("create_party", 3),
-        ]))): setattr(self, name, wrapped)
+        for name, wrapped in \
+                get_event_loop(). \
+                run_until_complete(
+                    gather(
+                        *starmap(wrap, [
+                            ("create_user", 4),
+                            ("get_user_by_id", 1),
+                            ("get_user_by_login", 1),
+                            ("set_user_admin", 1),
+                            ("set_user_verified", 1),
+                            ("create_game", 2),
+                            ("get_game_by_id", 1),
+                            ("get_game_by_name", 1),
+                            ("get_games_by_owner", 1),
+                            ("set_game_owner", 1),
+                            ("create_party", 3),
+                        ])
+                    )
+                ).result():
+            setattr(self, name, wrapped)
 
 
 class SQLite(RelationalDataBase):
     """Implementation database-free"""
     def __init__(self):
-        dbfile = str(get_package_path().joinpath("storage", "data.sqlite3"))
+        dbfile = pathjoin(root(), "storage", "data.sqlite3")
         self.conn = sqlite3_connect(dbfile)
         self.queries = {}
 
         cur = self.conn.cursor()
-        root = get_package_path().joinpath("storage", "sql_queries", "sqlite")
-        for filename in listdir(str(root)):
-            with root.joinpath(filename).open() as file:
+        sqldir = pathjoin(root(), "storage", "sql_queries", "sqlite")
+        for filename in listdir(sqldir):
+            with Path(sqldir).joinpath(filename).open() as file:
                 sql = file.read()
                 if filename.startswith("create_table"):
                     cur.execute(sql)

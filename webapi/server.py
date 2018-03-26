@@ -25,7 +25,7 @@ async def setup_postgres(_app, loop):
         password=config.postgres.PASSWORD,
         loop=loop
     )
-    drivers.RDB = database.Postgres(postgres)
+    drivers.RDB = drivers.Postgres(postgres)
     logger.info("Connection to postgres established.")
 
 
@@ -43,7 +43,7 @@ async def setup_redis(_app, loop):
             password=config.redis.PASSWORD,
             loop=loop
         )
-    drivers.KVS = database.Redis(redisconn)
+    drivers.KVS = drivers.Redis(redisconn)
     logger.info("Connection to redis established.")
 
 
@@ -52,11 +52,11 @@ if config.webapi.PRODUCTION:
     app.listener("before_server_start")(setup_postgres)
     app.listener("before_server_start")(setup_redis)
 else:
-    drivers.RDB = database.SQLite()
-    drivers.KVS = database.InMemory()
+    drivers.RDB = drivers.SQLite()
+    drivers.KVS = drivers.InMemory()
 
-@app.routes("/status")
-await def server_status(_req):
+@app.route("/status")
+async def server_status(_req):
     return text("Server running\n")
 
 # Register routes

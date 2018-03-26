@@ -1,10 +1,10 @@
-CREATE TABLE IF NOT EXISTS tbgame (
+CREATE TABLE IF NOT EXISTS tbgames (
     gameid INTEGER NOT NULL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
     ownerid BLOB NOT NULL,
 
-    CONSTRAINT fk_ownerid FOREIGN KEY (userid)
-        REFERENCES tbuser
+    CONSTRAINT fk_ownerid FOREIGN KEY (ownerid)
+        REFERENCES tbusers
         ON UPDATE CASCADE
         ON DELETE RESTRICT
 )
