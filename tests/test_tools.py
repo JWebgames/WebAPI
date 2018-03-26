@@ -5,7 +5,7 @@ from ipaddress import IPv4Address, IPv6Address
 from sys import stdout
 from typing import Union, List
 from unittest import TestCase
-from ..tools import cast, DelayLogFor
+from webapi.tools import cast, DelayLogFor
 
 class TestCast(TestCase):
     """Test case for tools.cast"""

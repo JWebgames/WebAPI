@@ -4,8 +4,7 @@ import logging
 import sys
 from datetime import datetime, timedelta
 from logging.handlers import BufferingHandler
-from os import environ
-from pathlib import Path
+from os.path import abspath, dirname
 from typing import Union, Optional, List
 from uuid import uuid4
 import jwt as jwtlib
@@ -58,12 +57,9 @@ def real_type(typ):
     return typ
 
 
-def get_package_path():
+def root():
     """Return the path of the package root"""
-    root = environ.get("WEBAPI_ROOT")
-    if root:
-        return Path(root)
-    return Path(sys.modules['__main__'].__file__).parent
+    return dirname(abspath(__file__))
 
 
 class DelayLogFor(BufferingHandler):
@@ -99,20 +95,20 @@ class DelayLogFor(BufferingHandler):
         self.close()
 
 def generate_token(key, iat=None, exp_delta=timedelta(minutes=5), typ="player",
-                   uid="00000000-0000-0000-0000-000000000000"):
+                   tid=None, uid="00000000-0000-0000-0000-000000000000"):
     """Generate a JSON Web Token"""
     if iat is None:
         iat = datetime.utcnow()
 
-    if uid is None:
-        uid = uuid4()
+    if tid is None:
+        tid = str(uuid4())
 
     return jwtlib.encode({
         "iss": "webapi",
         "sub": "webgames",
         "iat": iat,
         "exp": iat + exp_delta,
-        "tid": str(uuid4()),
+        "tid": tid,
         "typ": typ,
         "uid": uid
     }, key).decode()

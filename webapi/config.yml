@@ -1,24 +1,22 @@
 postgres:
+  DATABASE: null
   DSN: null
   HOST: null
+  PASSWORD: null
   PORT: null
   USER: null
-  DATABASE: null
-  PASSWORD: null
 redis:
+  DATABASE: null
   DSN: null
   HOST: null
-  PORT: null
-  DATABASE: null
   PASSWORD: null
+  PORT: null
 webapi:
-  PRODUCTION: no
   HOST: localhost
-  PORT: 22548
-  LOG_LEVEL: WARNING
-  JWT_SECRET: super-secret-password
   JWT_EXPIRATION_TIME: 12h
-  REVERSE_PROXY_IPS: 
-    - 127.0.0.1
-    - ff00::80
+  JWT_SECRET: super-secret-password
+  LOG_LEVEL: WARNING
+  PORT: 22548
+  PRODUCTION: false
+  REVERSE_PROXY_IPS: null
 
