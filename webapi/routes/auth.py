@@ -6,10 +6,10 @@ import scrypt
 from pytimeparse import parse as timeparse
 from sanic import Blueprint
 from sanic.exceptions import Forbidden
-from sanic.response import json, json
+from sanic.response import json
 from ..config import webapi
 from ..middlewares import authenticate, require_fields, ClientType
-from .. import database
+from ..storage import drivers 
 
 bp = Blueprint("auth")
 logger = getLogger(__name__)
@@ -20,7 +20,7 @@ JWT_EXPIRATION_TIME = timedelta(timeparse(webapi.JWT_EXPIRATION_TIME))
 async def register(req, username, email, password):
     userid = uuid4()
     hashed_password = scrypt.encrypt(token_bytes(64), password)
-    await database.RDB.create_user(userid,
+    await drivers.RDB.create_user(userid,
                                    username,
                                    email,
                                    hashed_password,
@@ -29,7 +29,7 @@ async def register(req, username, email, password):
 @bp.route("/login", methods=["POST"])
 @require_fields({"login", "password"})
 async def login(req, login, password):
-    user = await database.RDB.get_user_by_login(login)
+    user = await drivers.RDB.get_user_by_login(login)
     if user is None:
         logger.log(45, "User not found (IP: %s)", req.ip)
         raise NotFound("User not found")

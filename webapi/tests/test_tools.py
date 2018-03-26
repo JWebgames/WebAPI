@@ -17,7 +17,7 @@ class TestCast(TestCase):
         """try smth very difficult"""
         the_type = List[Union[IPv4Address, IPv6Address]]
 
-        self.assertEqual(cast(["127.0.0.1", "fe80::"], the_type), 
+        self.assertEqual(cast(["127.0.0.1", "fe80::"], the_type),
                          [IPv4Address("127.0.0.1"), IPv6Address("fe80::")])
 
 class TestDelayLogFor(TestCase):
