@@ -90,7 +90,7 @@ def authenticate(allowed_client_types: set):
                 raise Unauthorized("Bearer authorization type required")
 
             try:
-                jwt = jwtlib.decode(bearer[7:].strip(), webapi.JWT_SECRET)
+                jwt = jwtlib.decode(bearer[7:].strip(), webapi.JWT_SECRET, algorithms=['HS256'])
             except jwtlib.exceptions.InvalidTokenError:
                 logger.log(45, f"Invalid token (IP: {req.ip})")
                 raise Forbidden("Invalid token")
