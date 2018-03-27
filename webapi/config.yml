@@ -1,13 +1,13 @@
 postgres:
   DATABASE: null
   DSN: null
-  HOST: null
+  HOST: /var/run/postgresql/.s.PGSQL.5432
   PASSWORD: null
   PORT: null
   USER: null
 redis:
   DATABASE: null
-  DSN: null
+  DSN: /var/run/redis/redis.sock
   HOST: null
   PASSWORD: null
   PORT: null
