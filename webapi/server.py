@@ -14,8 +14,9 @@ from .routes.auth import bp as authbp
 logger = logging.getLogger(__name__)
 
 
-async def setup_postgres(_app, loop):
+async def connect_to_postgres(_app, loop, prepare=True):
     """Connect to postgres and expose the connection object"""
+    logger.info("Connecting to postgres...")
     postgres = await asyncpg.connect(
         dsn=config.postgres.DSN,
         host=config.postgres.HOST,
@@ -27,10 +28,13 @@ async def setup_postgres(_app, loop):
     )
     drivers.RDB = drivers.Postgres(postgres)
     logger.info("Connection to postgres established.")
+    if prepare:
+        await drivers.RDB.prepare()
 
 
-async def setup_redis(_app, loop):
+async def connect_to_redis(_app, loop):
     """Connect to redis and expose the connection object"""
+    logger.info("Connecting to redis...")
     if config.redis.DSN is not None:
         redisconn = await aioredis.create_pool(
             address=config.redis.DSN,
@@ -47,10 +51,27 @@ async def setup_redis(_app, loop):
     logger.info("Connection to redis established.")
 
 
+async def disconnect_from_postgres(_app, _loop):
+    """Safely disconnect from postgres"""
+    logger.info("Disconnecting from postgres...")
+    await drivers.RDB.conn.close()
+    logger.info("Disconnected from prostgres.")
+
+
+async def disconnect_from_redis(_app, _loop):
+    """Safely disconnect from redis"""
+    logger.info("Disconnecting from redis...")
+    drivers.KVS.conn.close()
+    await drivers.KVS.conn.wait_closed()
+    logger.info("Disconnected from redis")
+
+
 # Register remote or local databases
 if config.webapi.PRODUCTION:
-    app.listener("before_server_start")(setup_postgres)
-    app.listener("before_server_start")(setup_redis)
+    app.listener("before_server_start")(connect_to_postgres)
+    app.listener("before_server_start")(connect_to_redis)
+    app.listener("after_server_stop")(disconnect_from_postgres)
+    app.listener("after_server_stop")(disconnect_from_redis)
 else:
     drivers.RDB = drivers.SQLite()
     drivers.KVS = drivers.InMemory()
