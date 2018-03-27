@@ -11,12 +11,13 @@ from uuid import uuid4
 
 from sanic.exceptions import InvalidUsage
 from sanic.response import json
+from jwt import decode as jwt_decode
 
-from webapi import database
 from webapi.tools import generate_token
 from webapi.config import webapi
 from webapi.server import app
 from webapi.middlewares import ClientType, authenticate, require_fields
+from webapi.storage import drivers
 
 logger = getLogger(__name__)
 
@@ -29,9 +30,7 @@ ADMIN_JWT = generate_token(webapi.JWT_SECRET, typ=ClientType.ADMIN.value)
 EXPIRED_JWT = generate_token(webapi.JWT_SECRET,
                              iat=datetime.utcnow() - timedelta(hours=24))
 WRONG_KEY_JWT = generate_token("wrong-super-secret-password")
-REVOKED_TID = str(uuid4())
-REVOKED_JWT = generate_token(webapi.JWT_SECRET, tid=REVOKED_TID)
-get_event_loop().run_until_complete(database.KVS.revoke_token(REVOKED_TID))
+REVOKED_JWT = generate_token(webapi.JWT_SECRET)
 
 @app.route("/tests/http_error")
 def raise_http_error(_req):
@@ -162,11 +161,15 @@ class TestAuthenticate(TestCase):
         """Fail if the token is revoked"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            _, res = app.test_client.get("/tests/auth", headers={
+            _, res_logout = app.test_client.get("/v1/auth/logout", headers={
                 "Authorization": "Bearer: %s" % REVOKED_JWT
             })
-        self.assertEqual(res.status, 403)
-        self.assertEqual(res.json["error"], "Revoked token")
+            _, res_auth = app.test_client.get("/tests/auth", headers={
+                "Authorization": "Bearer: %s" % REVOKED_JWT
+            })
+        self.assertEqual(res_logout.status, 200)
+        self.assertEqual(res_auth.status, 403)
+        self.assertEqual(res_auth.json["error"], "Revoked token")
 
 class TestRequireFields(TestCase):
     """Test middlewares.require_fields"""
