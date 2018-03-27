@@ -3,6 +3,7 @@
 import logging
 import sys
 from datetime import datetime, timedelta
+from distutils.util import strtobool
 from logging.handlers import BufferingHandler
 from os.path import abspath, dirname
 from typing import Union, Optional, List
@@ -111,4 +112,12 @@ def generate_token(key, iat=None, exp_delta=timedelta(minutes=5), typ="player",
         "tid": tid,
         "typ": typ,
         "uid": uid
-    }, key).decode()
+    }, key, algorithm='HS256').decode()
+
+def ask_bool(prompt):
+    """Ask a question to the user, retry until the reply is valid"""
+    while True:
+        try:
+            return strtobool(input("%s (yes/no) " % prompt).strip().casefold())
+        except ValueError:
+            continue
