@@ -48,7 +48,7 @@ async def login(req, login, password):
         "tid": str(uuid4()),
         "typ": ClientType.ADMIN.value if user["isadmin"] else ClientType.USER.value,
         "uid": str(user["userid"])
-    }, webapi.JWT_SECRET)
+    }, webapi.JWT_SECRET, algorithm='HS256')
 
     return json({"token": jwt})
 
@@ -56,5 +56,5 @@ async def login(req, login, password):
 @bp.route("/logout", methods=["GET"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
 async def logout(req, jwt):
-    await database.KVS.revoke_token(jwt["tid"])
+    await drivers.KVS.revoke_token(jwt)
     return json({})
