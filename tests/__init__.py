@@ -8,3 +8,4 @@ logging.basicConfig(filename="/dev/null")
 logging.addLevelName(45, "SECURITY")
 
 expose_default()
+#expose_default(webapi={"PRODUCTION": True})

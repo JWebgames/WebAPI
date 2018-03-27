@@ -19,60 +19,59 @@ from webapi.exceptions import ConfigMissingOptionError,\
                               ConfigUnknownOptionError
 from webapi.tools import root
 
-OUTPUT = """+--------------------------cli:webapi---------------------------+
-| LOG_LEVEL                     |                         DEBUG |
-+-------------------------cli:postgres--------------------------+
-| HOST                          |                   192.168.0.3 |
-+--------------------------env:webapi---------------------------+
-| LOG_LEVEL                     |                          INFO |
-+-------------------------env:postgres--------------------------+
-| HOST                          |                   192.168.0.2 |
-+---------------------------env:redis---------------------------+
-| HOST                          |                   192.168.0.1 |
-+-------------------------yml:postgres--------------------------+
-| DATABASE                      |                          None |
-| DSN                           |                          None |
-| HOST                          |                          None |
-| PASSWORD                      |                          None |
-| PORT                          |                          None |
-| USER                          |                          None |
-+---------------------------yml:redis---------------------------+
-| DATABASE                      |                          None |
-| DSN                           |                          None |
-| HOST                          |                          None |
-| PASSWORD                      |                          None |
-| PORT                          |                          None |
-+--------------------------yml:webapi---------------------------+
-| HOST                          |                     localhost |
-| JWT_EXPIRATION_TIME           |                           12h |
-| JWT_SECRET                    |         super-secret-password |
-| LOG_LEVEL                     |                       WARNING |
-| PORT                          |                         22548 |
-| PRODUCTION                    |                         False |
-| REVERSE_PROXY_IPS             |                          None |
-+-------------------------merged:webapi-------------------------+
-| HOST                          |                     localhost |
-| PORT                          |                         22548 |
-| JWT_SECRET                    |         super-secret-password |
-| JWT_EXPIRATION_TIME           |                           12h |
-| LOG_LEVEL                     |                         DEBUG |
-| PRODUCTION                    |                         False |
-| REVERSE_PROXY_IPS             |                          None |
-+------------------------merged:postgres------------------------+
-| DSN                           |                          None |
-| HOST                          |                   192.168.0.3 |
-| PORT                          |                          None |
-| USER                          |                          None |
-| DATABASE                      |                          None |
-| PASSWORD                      |                          None |
-+-------------------------merged:redis--------------------------+
-| DSN                           |                          None |
-| HOST                          |                   192.168.0.1 |
-| PORT                          |                          None |
-| DATABASE                      |                          None |
-| PASSWORD                      |                          None |
-+---------------------------------------------------------------+
-"""
+OUTPUT = """+------------------------------cli:webapi------------------------------+
+| LOG_LEVEL                        |                             DEBUG |
++-----------------------------cli:postgres-----------------------------+
+| HOST                             |                       192.168.0.3 |
++------------------------------env:webapi------------------------------+
+| LOG_LEVEL                        |                              INFO |
++-----------------------------env:postgres-----------------------------+
+| HOST                             |                       192.168.0.2 |
++------------------------------env:redis-------------------------------+
+| HOST                             |                       192.168.0.1 |
++-----------------------------yml:postgres-----------------------------+
+| DATABASE                         |                              None |
+| DSN                              |                              None |
+| HOST                             | /var/run/postgr...l/.s.PGSQL.5432 |
+| PASSWORD                         |                              None |
+| PORT                             |                              None |
+| USER                             |                              None |
++------------------------------yml:redis-------------------------------+
+| DATABASE                         |                              None |
+| DSN                              |         /var/run/redis/redis.sock |
+| HOST                             |                              None |
+| PASSWORD                         |                              None |
+| PORT                             |                              None |
++------------------------------yml:webapi------------------------------+
+| HOST                             |                         localhost |
+| JWT_EXPIRATION_TIME              |                               12h |
+| JWT_SECRET                       |             super-secret-password |
+| LOG_LEVEL                        |                           WARNING |
+| PORT                             |                             22548 |
+| PRODUCTION                       |                             False |
+| REVERSE_PROXY_IPS                |                              None |
++----------------------------merged:webapi-----------------------------+
+| HOST                             |                         localhost |
+| PORT                             |                             22548 |
+| JWT_SECRET                       |             super-secret-password |
+| JWT_EXPIRATION_TIME              |                               12h |
+| LOG_LEVEL                        |                             DEBUG |
+| PRODUCTION                       |                             False |
+| REVERSE_PROXY_IPS                |                              None |
++---------------------------merged:postgres----------------------------+
+| DSN                              |                              None |
+| HOST                             |                       192.168.0.3 |
+| PORT                             |                              None |
+| USER                             |                              None |
+| DATABASE                         |                              None |
+| PASSWORD                         |                              None |
++-----------------------------merged:redis-----------------------------+
+| DSN                              |         /var/run/redis/redis.sock |
+| HOST                             |                       192.168.0.1 |
+| PORT                             |                              None |
+| DATABASE                         |                              None |
+| PASSWORD                         |                              None |
++----------------------------------------------------------------------+"""
 
 class TestValidateConfig(TestCase):
     """Test case for config.validate_cofig"""
@@ -137,15 +136,9 @@ class ConfigIntegrationTest(TestCase):
             "REDIS_HOST": "192.168.0.1",
             "PGHOST": "192.168.0.2"
         }
-        
-        python = sys.argv[0].split(" ", 1)[0]
-        which = Popen(["/usr/bin/which", python], stdout=PIPE)
-        which.wait()
-        python_path = which.stdout.read().strip()
-        which.stdout.close()
 
         command = [
-            python_path,
+            sys.executable,
             "-m",
             "webapi",
             "showconfig",
