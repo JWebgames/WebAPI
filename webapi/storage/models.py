@@ -1,6 +1,6 @@
 """Data models"""
 
-from typing import NamedTuple, Optionnal, List
+from typing import NamedTuple
 from uuid import UUID
 
 class User(NamedTuple):
@@ -11,16 +11,13 @@ class User(NamedTuple):
     isverified: bool
     isadmin: bool
 
+    def __str__(self):
+        tmpl = "User(userid={userid}, name={name}, " \
+               "email={email}, password=<not shown>, " \
+               "isverified={isverified}, isadmin={isadmin})"
+        return tmpl.format(**self._asdict())
+
 class Game(NamedTuple):
     gameid: int
     name: str
     ownerid: UUID
-
-class Party(NamedTuple):
-    partyid: UUID
-    gameid: int
-    playerids: Optionnal[List[UUID]] = None
-
-class LinkPartyUser(NamedTuple):
-    partyid: UUID
-    userid: UUID
