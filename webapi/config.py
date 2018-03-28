@@ -68,7 +68,7 @@ class RedisConfig(NamedTuple):
     DSN: Optional[str] = "/var/run/redis/redis.sock"
     HOST: Optional[str] = None
     PORT: Optional[int] = None
-    DATABASE: Optional[str] = None
+    DATABASE: Optional[int] = None
     PASSWORD: Optional[str] = None
 
 
@@ -89,7 +89,6 @@ def get_from_cli():
     parser = ArgumentParser(prog="{} {}".format(argv[0], argv[1]),
                             description="Webgames Web API for managing games",
                             argument_default=sentinel)
-    parser.add_argument("--config")
     for name, _, block in triples:
         name_lower = name.lower()
         for key in block._fields:
