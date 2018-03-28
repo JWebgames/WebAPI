@@ -5,7 +5,7 @@ from secrets import token_bytes
 from uuid import uuid4
 from scrypt import encrypt as scrypt_encrypt
 from .config import show as show_config
-from .server import setup_postgres
+from .server import connect_to_postgres
 from .storage import drivers
 from .tools import ask_bool
 
