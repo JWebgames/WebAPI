@@ -1,3 +1,3 @@
-SELECT userid, name, email, password, isadmin, isverified
+SELECT *
 FROM tbuser
-WHERE name=:login OR email=:login
+WHERE name=:1 OR email=:1

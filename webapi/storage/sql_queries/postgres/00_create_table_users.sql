@@ -3,8 +3,8 @@ CREATE TABLE tbusers (
     name varchar(24) UNIQUE,
     email varchar(254) UNIQUE,
     password bytea NOT NULL,
-    isverified boolean NOT NULL DEFAULT FALSE,
     isadmin boolean NOT NULL DEFAULT FALSE,
+    isverified boolean NOT NULL DEFAULT FALSE,
 
     CONSTRAINT chk_name CHECK (name ~* '^\w{3,}$'),
     CONSTRAINT chk_name_not_email CHECK (name !~* '^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$'),
