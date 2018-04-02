@@ -23,6 +23,6 @@ after_success:
   - echo username = Julien00859 >> $HOME/.pypirc
   - echo password = $PYPI_PWD >> $HOME/.pypirc
   - twine upload dist/*
-  - docker build . --tag jwebgames/webapi:latest jwebgames/webapi:stable jwebgames/webapi:$(cat version)
+  - docker build -t jwebgames/webapi:latest -t jwebgames/webapi:stable -t jwebgames/webapi:$(cat version) .
   - echo "$DOCKER_PWD" | docker login -u julien00859 --password-stdin
   - docker push jwebgames/webapi
