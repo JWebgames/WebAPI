@@ -1,3 +1,3 @@
 UPDATE tbuser
-SET isverified = 1
-WHERE userid=:userid
+SET isverified = :2
+WHERE userid = :1

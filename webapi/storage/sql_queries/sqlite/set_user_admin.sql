@@ -1,3 +1,3 @@
 UPDATE tbuser
-SET isadmin = 1
-WHERE userid=:userid
+SET isadmin = :2
+WHERE userid = :1
