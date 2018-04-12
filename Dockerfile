@@ -7,4 +7,4 @@ RUN pip install -r requirements.txt
 
 EXPOSE 22548
 
-CMD ["python", "-m", "webapi"]
+CMD ["python", "-m", "webapi", "run"]
