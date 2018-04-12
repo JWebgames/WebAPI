@@ -58,6 +58,9 @@ OUTPUT = """+------------------------------cli:webapi---------------------------
 | LOG_LEVEL                        |                             DEBUG |
 | PRODUCTION                       |                             False |
 | REVERSE_PROXY_IPS                |                              None |
+| SSL_CERT_FILE                    |                              None |
+| SSL_KEY_FILE                     |                              None |
+| SSL_KEY_PASS                     |                              None |
 +---------------------------merged:postgres----------------------------+
 | DSN                              |                              None |
 | HOST                             |                       192.168.0.3 |
