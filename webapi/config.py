@@ -8,6 +8,7 @@ them in one merged NamedTuple per configuration block
 import ipaddress
 from argparse import ArgumentParser
 from collections import ChainMap, namedtuple, defaultdict, Iterable
+from distutils.util import strtobool
 from operator import attrgetter, methodcaller
 from os import environ
 from pathlib import Path
@@ -44,7 +45,7 @@ class WebAPIConfig(NamedTuple):
     JWT_SECRET: str = "super-secret-password"
     JWT_EXPIRATION_TIME: str = "12h"
     LOG_LEVEL: str = "WARNING"
-    PRODUCTION: bool = False
+    PRODUCTION: Union[strtobool, bool] = False
     REVERSE_PROXY_IPS: Optional[List[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]]] = None
 
 
@@ -53,7 +54,7 @@ postgres: "PostgresConfig"
 class PostgresConfig(NamedTuple):
     """Postgres configuration block"""
     DSN: Optional[str] = None
-    HOST: Optional[str] = None
+    HOST: Optional[str] = "/var/run/postgresql/.s.PGSQL.5432"
     PORT: Optional[int] = None
     USER: Optional[str] = None
     DATABASE: Optional[str] = None
@@ -64,10 +65,10 @@ redis: "RedisConfig"
 @register("redis")
 class RedisConfig(NamedTuple):
     """Redis configuration block"""
-    DSN: Optional[str] = None
+    DSN: Optional[str] = "/var/run/redis/redis.sock"
     HOST: Optional[str] = None
     PORT: Optional[int] = None
-    DATABASE: Optional[str] = None
+    DATABASE: Optional[int] = None
     PASSWORD: Optional[str] = None
 
 
@@ -88,7 +89,6 @@ def get_from_cli():
     parser = ArgumentParser(prog="{} {}".format(argv[0], argv[1]),
                             description="Webgames Web API for managing games",
                             argument_default=sentinel)
-    parser.add_argument("--config")
     for name, _, block in triples:
         name_lower = name.lower()
         for key in block._fields:
@@ -150,6 +150,7 @@ def validate(name: str, block: NamedTuple, config: dict) -> None:
     """Look for invalid value type and missing/unknow fields"""
 
     composite_classes = [Union.__class__, List.__class__, Tuple.__class__]
+    aliases = {strtobool: str}
     for key, value in config.items():
         if key not in block._fields:
             raise ConfigUnknownOptionError(key, name)
@@ -161,12 +162,11 @@ def validate(name: str, block: NamedTuple, config: dict) -> None:
                 types.extend(reversed(types[-1].__args__))
             else:
                 break
-        types = [typ for typ in types
+        types = [aliases.get(typ, typ) for typ in types
                  if typ.__class__ not in composite_classes]
 
         if isinstance(value, list):
             value = value[0]
-
         if not isinstance(value, tuple(types)):
             raise ConfigOptionTypeError(key, name, types, type(value))
 
@@ -188,11 +188,12 @@ def expose_block(name: str, block: NamedTuple) -> None:
     globals()[name] = block
 
 
-def expose_default() -> None:
+def expose_default(**override) -> None:
     """Expose the default configuration"""
     default_config = get_default()
     for name, _, block in triples:
-        expose_block(name, block(**default_config[name]))
+        overrided = ChainMap(override.get(name, {}), default_config[name])
+        expose_block(name, block(**overrided))
 
 
 def load_merge_validate_expose() -> None:
@@ -207,30 +208,34 @@ def export_default_config() -> None:
     print(yaml_dump(get_default(), default_flow_style=False))
 
 
-def show() -> None:
+def show(short_output=False) -> None:
     """Nice output of the current configuration"""
+
+    shorten = lambda s: s if len(s) < 33 else "...".join([s[:15], s[-15:]])
+    s = lambda v: shorten(str(v))
 
     # Show configuration from each source
     cli, env, yml = load_all_sources()
-    for sourcename, source in [("cli", cli), ("env", env), ("yml", yml)]:
-        for blockname, block in source.items():
-            print("+{!s:-^63}+".format("{}:{}".format(sourcename, blockname)))
-            for key, value in block.items():
-                if not isinstance(value, str) and isinstance(value, Iterable):
-                    print("| {!s:<30}|{!s:>30} |".format(key, value[0]))
-                    for element in value[1:]:
-                        print("|{}|{!s:>30} |".format(" " * 31, element))
-                else:
-                    print("| {!s:<30}|{!s:>30} |".format(key, value))
+    if not short_output:
+        for sourcename, source in [("cli", cli), ("env", env), ("yml", yml)]:
+            for blockname, block in source.items():
+                print("+{!s:-^70}+".format("{}:{}".format(sourcename, blockname)))
+                for key, value in block.items():
+                    if not isinstance(value, str) and isinstance(value, Iterable):
+                        print("| {:<32} | {:>33} |".format(key, s(value[0])))
+                        for element in value[1:]:
+                            print("|{}| {:>33} |".format(" " * 33, s(element)))
+                    else:
+                        print("| {:<32} | {:>33} |".format(key, s(value)))
 
     # Show merge and validated configuration
     for name, block in merge_sources(cli, env, yml):
-        print("+{:-^63}+".format("merged:" + name))
+        print("+{:-^70}+".format("merged:" + name))
         for key, value in block._asdict().items():
             if not isinstance(value, str) and isinstance(value, Iterable):
-                print("| {!s:<30}|{!s:>30} |".format(key, value[0]))
+                print("| {:<32} | {:>33} |".format(key, s(value[0])))
                 for element in value[1:]:
-                    print("|{}|{!s:>30} |".format(" " * 31, element))
+                    print("|{} | {:>33} |".format(" " * 33, s(element)))
             else:
-                print("| {!s:<30}|{!s:>30} |".format(key, value))
-    print("+{}+".format("-" * 63))
+                print("| {:<32} | {:>33} |".format(key, s(value)))
+    print("+{}+".format("-" * 70))

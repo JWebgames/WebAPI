@@ -4,7 +4,7 @@ python:
 before_install:
   - sudo apt install libyaml-dev
 install:
-  - python setup.py install
+  - pip install -r requirements.txt
   - pip install -r requirements_test.txt
 env:
   WEBAPI_ROOT=$PWD/webapi
@@ -23,3 +23,6 @@ after_success:
   - echo username = Julien00859 >> $HOME/.pypirc
   - echo password = $PYPI_PWD >> $HOME/.pypirc
   - twine upload dist/*
+  - docker build -t jwebgames/webapi:latest -t jwebgames/webapi:stable -t jwebgames/webapi:$(cat version) .
+  - echo "$DOCKER_PWD" | docker login -u julien00859 --password-stdin
+  - docker push jwebgames/webapi

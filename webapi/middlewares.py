@@ -13,7 +13,7 @@ from sanic.exceptions import SanicException,\
                              Unauthorized,\
                              Forbidden
 from sanic.response import json
-from . import database
+from .storage import drivers
 from .config import webapi
 from .server import app
 
@@ -90,12 +90,12 @@ def authenticate(allowed_client_types: set):
                 raise Unauthorized("Bearer authorization type required")
 
             try:
-                jwt = jwtlib.decode(bearer[7:].strip(), webapi.JWT_SECRET)
+                jwt = jwtlib.decode(bearer[7:].strip(), webapi.JWT_SECRET, algorithms=['HS256'])
             except jwtlib.exceptions.InvalidTokenError:
                 logger.log(45, f"Invalid token (IP: {req.ip})")
                 raise Forbidden("Invalid token")
 
-            if await database.KVS.is_token_revoked(jwt["tid"]):
+            if await drivers.KVS.is_token_revoked(jwt["tid"]):
                 logger.log(45, f"Token has been revoked (IP: {req.ip})")
                 raise Forbidden("Revoked token")
 
