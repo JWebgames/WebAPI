@@ -50,6 +50,9 @@ OUTPUT = """+------------------------------cli:webapi---------------------------
 | PORT                             |                             22548 |
 | PRODUCTION                       |                             False |
 | REVERSE_PROXY_IPS                |                              None |
+| SSL_CERT_FILE                    |                              None |
+| SSL_KEY_FILE                     |                              None |
+| SSL_KEY_PASS                     |                              None |
 +----------------------------merged:webapi-----------------------------+
 | HOST                             |                         localhost |
 | PORT                             |                             22548 |
