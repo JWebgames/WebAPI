@@ -19,4 +19,6 @@ webapi:
   PORT: 22548
   PRODUCTION: false
   REVERSE_PROXY_IPS: null
-
+  SSL_CERT_PATH: /var/ssl/cert.pem
+  SSL_KEY_PATH: /var/ssl/key.pem
+  SSL_KEY_PASS: null

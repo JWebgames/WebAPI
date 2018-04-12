@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import ssl
 from argparse import ArgumentParser
 from getpass import getpass
 from sys import argv, exit as sysexit
@@ -54,7 +55,20 @@ def exportconfig():
 def run():
     setup()
     from . import server
-    server.app.run(host=config.webapi.HOST, port=config.webapi.PORT)
+    ssl_context = None
+    if config.webapi.SSL_KEY_PATH and config.webapi.SSL_CERT_PATH:
+        ssl_context = ssl.create_default_context(
+            purpose=ssl.Purpose.CLIENT_AUTH)
+        ssl_context.load_cert_chain(
+            config.webapi.SSL_CERT_PATH,
+            config.webapi.SSL_KEY_PATH,
+            config.webapi.SSL_KEY_PASS)
+
+    server.app.run(
+        host=config.webapi.HOST,
+        port=config.webapi.PORT,
+        debug=not config.webapi.PRODUCTION,
+        ssl=ssl_context)
 
 @register
 def dryrun():

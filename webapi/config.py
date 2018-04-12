@@ -47,6 +47,9 @@ class WebAPIConfig(NamedTuple):
     LOG_LEVEL: str = "WARNING"
     PRODUCTION: Union[strtobool, bool] = False
     REVERSE_PROXY_IPS: Optional[List[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]]] = None
+    SSL_CERT_PATH: Optional[str] = None
+    SSL_KEY_PATH: Optional[str] = None
+    SSL_KEY_PASS: Optional[str] = None
 
 
 postgres: "PostgresConfig"
