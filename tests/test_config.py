@@ -50,8 +50,8 @@ OUTPUT = """+------------------------------cli:webapi---------------------------
 | PORT                             |                             22548 |
 | PRODUCTION                       |                             False |
 | REVERSE_PROXY_IPS                |                              None |
-| SSL_CERT_FILE                    |                              None |
-| SSL_KEY_FILE                     |                              None |
+| SSL_CERT_PATH                    |                              None |
+| SSL_KEY_PATH                     |                              None |
 | SSL_KEY_PASS                     |                              None |
 +----------------------------merged:webapi-----------------------------+
 | HOST                             |                         localhost |
@@ -61,8 +61,8 @@ OUTPUT = """+------------------------------cli:webapi---------------------------
 | LOG_LEVEL                        |                             DEBUG |
 | PRODUCTION                       |                             False |
 | REVERSE_PROXY_IPS                |                              None |
-| SSL_CERT_FILE                    |                              None |
-| SSL_KEY_FILE                     |                              None |
+| SSL_CERT_PATH                    |                              None |
+| SSL_KEY_PATH                     |                              None |
 | SSL_KEY_PASS                     |                              None |
 +---------------------------merged:postgres----------------------------+
 | DSN                              |                              None |
