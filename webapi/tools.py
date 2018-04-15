@@ -8,6 +8,7 @@ from logging.handlers import BufferingHandler
 from os.path import abspath, dirname
 from typing import Union, Optional, List
 from uuid import uuid4
+from asyncio import sleep
 import jwt as jwtlib
 
 logger = logging.getLogger(__name__)
@@ -128,3 +129,6 @@ def fake_async(func):
         await sleep(0)
         return func(*args, **kwargs)
     return wrapped
+
+def lruc(loop, coro):
+    return loop.run_until_complete(coro)
