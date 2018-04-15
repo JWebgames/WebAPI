@@ -1,3 +1,3 @@
 SELECT *
-FROM tbuser
+FROM tbusers
 WHERE userid=?

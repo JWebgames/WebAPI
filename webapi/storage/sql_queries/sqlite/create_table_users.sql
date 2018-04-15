@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS tbusers (
-    userid BLOB NOT NULL PRIMARY KEY,
+    userid TEXT NOT NULL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
     email TEXT NOT NULL UNIQUE,
     password BLOB NOT NULL,

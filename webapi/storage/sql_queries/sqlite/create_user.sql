@@ -1,2 +1,2 @@
-INSERT INTO tbuser (userid, name, email, password)
+INSERT INTO tbusers (userid, name, email, password)
 VALUES (?, ?, ?, ?)
