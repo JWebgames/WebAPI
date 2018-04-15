@@ -31,7 +31,8 @@ def setup():
         except ConfigError:
             should_exit = True
             logger.exception("Configuration error...")
-        stdout.level = logging._nameToLevel[config.webapi.LOG_LEVEL]
+        else:
+            stdout.level = logging._nameToLevel[config.webapi.LOG_LEVEL]
     if should_exit:
         sysexit(1)
 
