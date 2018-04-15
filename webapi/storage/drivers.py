@@ -80,7 +80,7 @@ class Postgres(RelationalDataBase):
             with Path(sqldir).joinpath(file).open() as sqlfile:
                 for sql in filter(methodcaller("strip"), sqlfile.read().split(";")):
                     status = await self.conn.execute(sql)
-                    logger.debug    ("%s", status)
+                    logger.debug("%s", status)
 
     async def prepare(self):
         """Cache all SQL available functions"""
@@ -170,7 +170,7 @@ class KeyValueStore():
     async def leave_group(self, groupid, userid):
         raise NotImplementedError()
     
-    async def join_queue(self, groupid, game) -> Optional[UUID]:
+    async def join_queue(self, groupid, game):
         raise NotImplementedError()
     
     async def leave_queue(self, groupid):
@@ -212,18 +212,19 @@ class InMemory(KeyValueStore):
                 raise PlayerInGroupAlready()
         
         groupid = uuid4()
-        self.groups[groupid] = Group(members=[userid], gameid=gameid, queueid=None)
+        self.groups[groupid] = Group(members=[userid], gameid=gameid, queueid=None, partyid=None)
         return groupid
     
-    @fake_async
-    def join_group(self, groupid, userid):
+    async def join_group(self, groupid, userid):
         group = self.groups.get(groupid)
         if group is None: raise GroupDoesntExist()
-        if group.queue is not None: raise GroupInQueueAlready()
+        if group.queueid is not None: raise GroupInQueueAlready()
         for group in self.groups.values():
             if userid in group.members:
                 raise PlayerInGroupAlready()
-        if len(group.members) + 1 > group.game.capacity:
+        
+        game = await RDB.get_game_by_id(group.gameid)
+        if len(group.members) + 1 > game.capacity:
             raise GroupIsFull()
 
         self.groups[groupid].append(userid)
@@ -238,14 +239,13 @@ class InMemory(KeyValueStore):
             self.leave_queue(self, groupid, group.queueid)
         group.members.remove(userid)
     
-    @fake_async
-    def join_queue(self, groupid):
+    async def join_queue(self, groupid):
         group = self.groups.get(groupid)
         if group is None: raise GroupDoesntExist()
 
-        game = RDB.get_game_by_id(group.gameid)
+        game = await RDB.get_game_by_id(group.gameid)
 
-        game_queue = self.queues.get(group.game.gameid)
+        game_queue = self.queues.get(game.gameid)
         if game_queue is None:
             game_queue = self.queues[game.gameid] = OrderedDict()
         
