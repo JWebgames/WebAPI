@@ -121,3 +121,10 @@ def ask_bool(prompt):
             return strtobool(input("%s (yes/no) " % prompt).strip().casefold())
         except ValueError:
             continue
+
+
+def fake_async(func):
+    async def wrapped(*args, **kwargs):
+        await sleep(0)
+        return func(*args, **kwargs)
+    return wrapped
