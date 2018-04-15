@@ -3,6 +3,7 @@
 from typing import NamedTuple, List, Optional
 from uuid import UUID
 
+
 class User(NamedTuple):
     userid: UUID
     name: str
@@ -17,14 +18,17 @@ class User(NamedTuple):
                "isverified={isverified}, isadmin={isadmin})"
         return tmpl.format(**self._asdict())
 
+
 class Game(NamedTuple):
     gameid: int
     name: str
     capacity: int
     ownerid: UUID
 
+
 class Group(NamedTuple):
     members: List[UUID]
     gameid: Optional[UUID]
     queueid: Optional[UUID]
     partyid: Optional[UUID]
+
