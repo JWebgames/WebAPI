@@ -1,7 +1,7 @@
 """Interfaces and implementation of databases drivers"""
 
 from asyncio import gather, get_event_loop, run_coroutine_threadsafe, sleep
-from collections import namedtuple
+from collections import namedtuple, OrderedDict
 from itertools import starmap
 from logging import getLogger
 from operator import methodcaller
@@ -11,8 +11,10 @@ from pathlib import Path
 from time import time
 from asyncpg import Record
 from sqlite3 import connect as sqlite3_connect
-from .models import User, Game
-from ..tools import root
+from .models import User, Game, Group
+from ..tools import root, fake_async
+from ..exceptions import *
+from uuid import uuid4
 
 logger = getLogger(__name__)
 
@@ -158,6 +160,21 @@ class KeyValueStore():
     async def is_token_revoked(self, token_id) -> bool:
         """Validate a non-expirated token"""
         raise NotImplementedError()
+    
+    async def create_group(self, userid):
+        raise NotImplementedError()
+    
+    async def join_group(self, groupid, userid):
+        raise NotImplementedError()
+
+    async def leave_group(self, groupid, userid):
+        raise NotImplementedError()
+    
+    async def join_queue(self, groupid, game) -> Optional[UUID]:
+        raise NotImplementedError()
+    
+    async def leave_queue(self, groupid):
+        raise NotImplementedError()
 
 
 class Redis(KeyValueStore):
@@ -176,12 +193,85 @@ class Redis(KeyValueStore):
 class InMemory(KeyValueStore):
     """Implementation database-free"""
     def __init__(self):
-        self.token_revocation_list = []
+        self.token_revocation_list = []  # List[token_id: UUID]
+        self.groups = {}  # Dict[group_id: UUID, NamedTuple[members: List[user_id: UUID], game_id: UUID, queue_id: UUID]]
+        self.queues = {}  # Dict[str, OrderedDict[UUID, list]]
 
-    async def revoke_token(self, token):
-        await sleep(0)
+    @fake_async
+    def revoke_token(self, token):
         self.token_revocation_list.append(token["tid"])
 
-    async def is_token_revoked(self, token_id) -> bool:
-        await sleep(0)
+    @fake_async
+    def is_token_revoked(self, token_id) -> bool:
         return token_id in self.token_revocation_list
+
+    @fake_async
+    def create_group(self, userid, gameid):
+        for group in self.groups.values():
+            if userid in group.members:
+                raise PlayerInGroupAlready()
+        
+        groupid = uuid4()
+        self.groups[groupid] = Group(members=[userid], gameid=gameid, queueid=None)
+        return groupid
+    
+    @fake_async
+    def join_group(self, groupid, userid):
+        group = self.groups.get(groupid)
+        if group is None: raise GroupDoesntExist()
+        if group.queue is not None: raise GroupInQueueAlready()
+        for group in self.groups.values():
+            if userid in group.members:
+                raise PlayerInGroupAlready()
+        if len(group.members) + 1 > group.game.capacity:
+            raise GroupIsFull()
+
+        self.groups[groupid].append(userid)
+    
+    @fake_async
+    def leave_group(self, groupid, userid):
+        group = self.groups.get(groupid)
+        if groupid is None: raise GroupDoesntExists()
+        if userid not in group.members: raise PlayerNotInGroup()
+        
+        if group.queueid is not None: 
+            self.leave_queue(self, groupid, group.queueid)
+        group.members.remove(userid)
+    
+    @fake_async
+    def join_queue(self, groupid):
+        group = self.groups.get(groupid)
+        if group is None: raise GroupDoesntExist()
+
+        game = RDB.get_game_by_id(group.gameid)
+
+        game_queue = self.queues.get(group.game.gameid)
+        if game_queue is None:
+            game_queue = self.queues[game.gameid] = OrderedDict()
+        
+        for queueid, queue in game_queue.items():
+            size = len(queue) + len(group.members)
+            if size < game.capacity:
+                queue.extend(group.members)
+                group.queueid = queueid
+                return
+            elif size == game.capacity:
+                queue.extend(group.members)
+                group.queueid = queueid
+                return queueid
+        
+        queueid = uuid4()
+        self.queues[game][queueid] = group.members.copy()
+        if len(self.queues[game][queueid]) == game.capacity:
+            return queueid
+    
+    @fake_async
+    def leave_queue(self, groupid, queueid):
+        group = self.groups.get(groupid)
+        if group is None: raise GroupDoesntExist()
+
+        queue = self.queues.get(queueid)
+        if queue is None: raise QueueDoesntExist()
+
+        for member in group.members:
+            queue.remove(member)

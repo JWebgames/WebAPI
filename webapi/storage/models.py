@@ -1,6 +1,6 @@
 """Data models"""
 
-from typing import NamedTuple
+from typing import NamedTuple, List, Optional
 from uuid import UUID
 
 class User(NamedTuple):
@@ -20,4 +20,11 @@ class User(NamedTuple):
 class Game(NamedTuple):
     gameid: int
     name: str
+    capacity: int
     ownerid: UUID
+
+class Group(NamedTuple):
+    members: List[UUID]
+    gameid: Optional[UUID]
+    queueid: Optional[UUID]
+    partyid: Optional[UUID]
