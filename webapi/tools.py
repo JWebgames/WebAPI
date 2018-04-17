@@ -1,17 +1,17 @@
 """Several tools used accross by other modules"""
 
 import logging
-import sys
 from datetime import datetime, timedelta
 from distutils.util import strtobool
 from logging.handlers import BufferingHandler
 from os.path import abspath, dirname
 from typing import Union, Optional, List
 from uuid import uuid4
-from asyncio import sleep
+from asyncio import sleep, get_event_loop
 import jwt as jwtlib
 
 logger = logging.getLogger(__name__)
+
 
 def find(func, iteratee):
     """Returns the first element that match the query"""
@@ -20,13 +20,14 @@ def find(func, iteratee):
             return value
     return None
 
+
 def cast(val, typ, *types):
-    """Cast a value to the given type. /!\\ Hack /!\\"""
+    """Cast a value to the given type. /!\\ Hack /!\\ """
 
     # get Optional
     if typ.__class__ in [Union.__class__, Optional.__class__] \
        and len(typ.__args__) == 2 \
-       and typ.__args__[1].__class__ == None.__class__:
+       and typ.__args__[1] is None:
         typ = typ.__args__[0]
 
     # split Unions
@@ -51,9 +52,8 @@ def cast(val, typ, *types):
     raise TypeError("{} not castable in any of {{{}}}.".format(val, types))
 
 
-
 def real_type(typ):
-    """Escape the type from Union and Optional. /!\\ Hack /!\\"""
+    """Escape the type from Union and Optional. /!\\ Hack /!\\ """
     if typ.__class__ in [Union.__class__, Optional.__class__]:
         return typ.__args__[0]
     return typ
@@ -96,6 +96,7 @@ class DelayLogFor(BufferingHandler):
         self.delayed_logger.handlers.extend(self.delayed_handlers)
         self.close()
 
+
 def generate_token(key, iat=None, exp_delta=timedelta(minutes=5), typ="player",
                    tid=None, uid="00000000-0000-0000-0000-000000000000"):
     """Generate a JSON Web Token"""
@@ -115,6 +116,7 @@ def generate_token(key, iat=None, exp_delta=timedelta(minutes=5), typ="player",
         "uid": uid
     }, key, algorithm='HS256').decode()
 
+
 def ask_bool(prompt):
     """Ask a question to the user, retry until the reply is valid"""
     while True:
@@ -130,5 +132,6 @@ def fake_async(func):
         return func(*args, **kwargs)
     return wrapped
 
-def lruc(loop, coro):
+
+def lruc(coro, loop=get_event_loop()):
     return loop.run_until_complete(coro)

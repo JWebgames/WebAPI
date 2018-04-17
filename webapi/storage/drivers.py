@@ -13,6 +13,7 @@ from .models import User, Game, Group
 from ..tools import root, fake_async
 from ..exceptions import *
 from uuid import UUID, uuid4
+from time import time
 
 logger = getLogger(__name__)
 
@@ -90,7 +91,7 @@ class Postgres(RelationalDataBase):
             ("get_user_by_login", 1, User),
             ("set_user_admin", 2, None),
             ("set_user_verified", 2, None),
-            ("create_game", 2, int),
+            ("create_game", 3, Game),
             ("get_game_by_id", 1, Game),
             ("get_game_by_name", 1, Game),
             ("get_games_by_owner", 1, Game),
@@ -99,8 +100,8 @@ class Postgres(RelationalDataBase):
 
         async def wrap(name, argscnt, class_=None):
             """Create the prepated statement"""
-            args = ", $".join(map(str, range(1, argscnt + 1)))
-            query = await self.conn.prepare("SELECT %s($%s)" % (name, args))
+            sqlargs = ", $".join(map(str, range(1, argscnt + 1)))
+            query = await self.conn.prepare("SELECT %s($%s)" % (name, sqlargs))
 
             async def wrapped(*args):
                 """Do the database call"""
@@ -135,11 +136,7 @@ class SQLite(RelationalDataBase):
                 if len(rows) == 0:
                     return None
                 elif len(rows) == 1:
-                    try:
-                        return class_(*rows[0])
-                    except:
-                        print(rows[0])
-                        raise
+                    return class_(*rows[0])
                 return map(lambda row: class_(*row), rows)
             return wrapped
 
@@ -229,7 +226,7 @@ class InMemory(KeyValueStore):
                 raise PlayerInGroupAlready()
 
         groupid = uuid4()
-        self.groups[groupid] = Group(members=[userid], gameid=gameid, queueid=None, partyid=None)
+        self.groups[groupid] = Group([userid], gameid, None, None)
         return groupid
 
     async def join_group(self, groupid, userid):
@@ -244,17 +241,19 @@ class InMemory(KeyValueStore):
         if len(group.members) + 1 > game.capacity:
             raise GroupIsFull()
 
-        self.groups[groupid].append(userid)
+        self.groups[groupid].members.append(userid)
 
     @fake_async
     def leave_group(self, groupid, userid):
         group = self.groups.get(groupid)
-        if groupid is None: raise GroupDoesntExists()
+        if groupid is None: raise GroupDoesntExist()
         if userid not in group.members: raise PlayerNotInGroup()
 
         if group.queueid is not None:
             self.leave_queue(self, groupid, group.queueid)
         group.members.remove(userid)
+        if not group.members:
+            del self.groups[groupid]
 
     async def join_queue(self, groupid):
         group = self.groups.get(groupid)
@@ -278,8 +277,9 @@ class InMemory(KeyValueStore):
                 return queueid
 
         queueid = uuid4()
-        self.queues[game][queueid] = group.members.copy()
-        if len(self.queues[game][queueid]) == game.capacity:
+        self.queues[game.gameid][queueid] = group.members.copy()
+        group.queueid = queueid
+        if len(self.queues[game.gameid][queueid]) == game.capacity:
             return queueid
 
     @fake_async
@@ -292,3 +292,10 @@ class InMemory(KeyValueStore):
 
         for member in group.members:
             queue.remove(member)
+
+    @fake_async
+    def msgqueue_push(self, userid, msg, msgid=None timestamp=None):
+        if msgid is None:
+            msgid = uuid4()
+        if timestamp is None:
+            timestamp = time()

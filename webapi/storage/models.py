@@ -22,13 +22,18 @@ class User(NamedTuple):
 class Game(NamedTuple):
     gameid: int
     name: str
-    capacity: int
     ownerid: UUID
+    capacity: int
 
 
-class Group(NamedTuple):
+class Group():
     members: List[UUID]
     gameid: Optional[UUID]
     queueid: Optional[UUID]
     partyid: Optional[UUID]
 
+    def __init__(self, members, gameid, queueid, partyid):
+        self.members = members
+        self.gameid = gameid
+        self.queueid = queueid
+        self.partyid = partyid
