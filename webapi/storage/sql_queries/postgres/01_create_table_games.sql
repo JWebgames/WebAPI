@@ -2,6 +2,7 @@ CREATE TABLE tbgames (
     gameid smallserial NOT NULL PRIMARY KEY,
     name varchar(24) NOT NULL UNIQUE,
     ownerid uuid NOT NULL,
+    capacity smallint NOT NULL,
 
     CONSTRAINT fk_ownerid FOREIGN KEY (ownerid)
         REFERENCES tbusers
@@ -9,9 +10,9 @@ CREATE TABLE tbgames (
         ON DELETE RESTRICT
 );
 
-CREATE FUNCTION create_game(name varchar(24), ownerid uuid) RETURNS smallint AS $$
-    INSERT INTO tbgames (name, ownerid)
-    VALUES (name, ownerid)
+CREATE FUNCTION create_game(name varchar(24), ownerid uuid, capacity smallint) RETURNS smallint AS $$
+    INSERT INTO tbgames (name, ownerid, capacity)
+    VALUES (name, ownerid, capacity)
     RETURNING gameid
 $$ LANGUAGE SQL;
 

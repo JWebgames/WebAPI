@@ -1,8 +1,6 @@
 """Interfaces and implementation of databases drivers"""
 
-from asyncio import gather, get_event_loop, run_coroutine_threadsafe, sleep
-from collections import namedtuple
-from itertools import starmap
+from collections import OrderedDict
 from logging import getLogger
 from operator import methodcaller
 from os import listdir
@@ -11,13 +9,17 @@ from pathlib import Path
 from time import time
 from asyncpg import Record
 from sqlite3 import connect as sqlite3_connect
-from .models import User, Game
-from ..tools import root
+from .models import User, Game, Group
+from ..tools import root, fake_async
+from ..exceptions import *
+from uuid import UUID, uuid4
+from time import time
 
 logger = getLogger(__name__)
 
 RDB: "RelationalDataBase"
 KVS: "KeyValueStore"
+
 
 class RelationalDataBase():
     """Interface for relational database access"""
@@ -41,7 +43,7 @@ class RelationalDataBase():
         """Set a user as admin"""
         raise NotImplementedError()
 
-    async def create_game(self, name, ownerid):
+    async def create_game(self, name, ownerid, capacity):
         """Create a game"""
         raise NotImplementedError()
 
@@ -78,7 +80,7 @@ class Postgres(RelationalDataBase):
             with Path(sqldir).joinpath(file).open() as sqlfile:
                 for sql in filter(methodcaller("strip"), sqlfile.read().split(";")):
                     status = await self.conn.execute(sql)
-                    logger.debug    ("%s", status)
+                    logger.debug("%s", status)
 
     async def prepare(self):
         """Cache all SQL available functions"""
@@ -89,7 +91,7 @@ class Postgres(RelationalDataBase):
             ("get_user_by_login", 1, User),
             ("set_user_admin", 2, None),
             ("set_user_verified", 2, None),
-            ("create_game", 2, int),
+            ("create_game", 3, Game),
             ("get_game_by_id", 1, Game),
             ("get_game_by_name", 1, Game),
             ("get_games_by_owner", 1, Game),
@@ -98,8 +100,9 @@ class Postgres(RelationalDataBase):
 
         async def wrap(name, argscnt, class_=None):
             """Create the prepated statement"""
-            args = ", $".join(map(str, range(1, argscnt + 1)))
-            query = await self.conn.prepare("SELECT %s($%s)" % (name, args))
+            sqlargs = ", $".join(map(str, range(1, argscnt + 1)))
+            query = await self.conn.prepare("SELECT %s($%s)" % (name, sqlargs))
+
             async def wrapped(*args):
                 """Do the database call"""
                 rows = (await query.fetchrow(*args))[name]
@@ -113,6 +116,7 @@ class Postgres(RelationalDataBase):
         for name, args_count, class_ in functions:
             setattr(self, name, await wrap(name, args_count, class_))
 
+
 class SQLite(RelationalDataBase):
     """Implementation database-free"""
     def __init__(self):
@@ -120,12 +124,18 @@ class SQLite(RelationalDataBase):
         sqldir = Path(root()).joinpath("storage", "sql_queries", "sqlite")
 
         def wrap(sql, class_=None):
-            async def wrapped(self, *args):
-                await sleep(0)
+            @fake_async
+            def wrapped(*args):
+                args = list(args)
+                for i in range(len(args)):
+                    if isinstance(args[i], UUID):
+                        args[i] = str(args[i])
                 rows = self.conn.cursor().execute(sql, args).fetchall()
                 if class_ is None:
                     return rows[0] if len(rows) == 1 else rows
-                if len(rows) == 1:
+                if len(rows) == 0:
+                    return None
+                elif len(rows) == 1:
                     return class_(*rows[0])
                 return map(lambda row: class_(*row), rows)
             return wrapped
@@ -139,9 +149,15 @@ class SQLite(RelationalDataBase):
 
         functions = [
             ("create_user", None),
+            ("get_user_by_id", User),
             ("get_user_by_login", User),
             ("set_user_admin", None),
-            ("set_user_verified", None)
+            ("set_user_verified", None),
+            ("create_game", None),
+            ("get_game_by_id", Game),
+            ("get_game_by_name", Game),
+            ("get_games_by_owner", Game),
+            ("set_game_owner", None)
         ]
 
         for function, class_ in functions:
@@ -157,6 +173,21 @@ class KeyValueStore():
 
     async def is_token_revoked(self, token_id) -> bool:
         """Validate a non-expirated token"""
+        raise NotImplementedError()
+
+    async def create_group(self, userid):
+        raise NotImplementedError()
+
+    async def join_group(self, groupid, userid):
+        raise NotImplementedError()
+
+    async def leave_group(self, groupid, userid):
+        raise NotImplementedError()
+
+    async def join_queue(self, groupid, game):
+        raise NotImplementedError()
+
+    async def leave_queue(self, groupid):
         raise NotImplementedError()
 
 
@@ -176,12 +207,98 @@ class Redis(KeyValueStore):
 class InMemory(KeyValueStore):
     """Implementation database-free"""
     def __init__(self):
-        self.token_revocation_list = []
+        self.token_revocation_list = []  # List[token_id: UUID]
+        self.groups = {}  # Dict[group_id: UUID, NamedTuple[members: List[user_id: UUID], game_id: UUID, queue_id: UUID]]
+        self.queues = {}  # Dict[str, OrderedDict[UUID, list]]
 
-    async def revoke_token(self, token):
-        await sleep(0)
+    @fake_async
+    def revoke_token(self, token):
         self.token_revocation_list.append(token["tid"])
 
-    async def is_token_revoked(self, token_id) -> bool:
-        await sleep(0)
+    @fake_async
+    def is_token_revoked(self, token_id) -> bool:
         return token_id in self.token_revocation_list
+
+    @fake_async
+    def create_group(self, userid, gameid):
+        for group in self.groups.values():
+            if userid in group.members:
+                raise PlayerInGroupAlready()
+
+        groupid = uuid4()
+        self.groups[groupid] = Group([userid], gameid, None, None)
+        return groupid
+
+    async def join_group(self, groupid, userid):
+        group = self.groups.get(groupid)
+        if group is None: raise GroupDoesntExist()
+        if group.queueid is not None: raise GroupInQueueAlready()
+        for group in self.groups.values():
+            if userid in group.members:
+                raise PlayerInGroupAlready()
+
+        game = await RDB.get_game_by_id(group.gameid)
+        if len(group.members) + 1 > game.capacity:
+            raise GroupIsFull()
+
+        self.groups[groupid].members.append(userid)
+
+    @fake_async
+    def leave_group(self, groupid, userid):
+        group = self.groups.get(groupid)
+        if groupid is None: raise GroupDoesntExist()
+        if userid not in group.members: raise PlayerNotInGroup()
+
+        if group.queueid is not None:
+            self.leave_queue(self, groupid, group.queueid)
+        group.members.remove(userid)
+        if not group.members:
+            del self.groups[groupid]
+
+    async def join_queue(self, groupid):
+        group = self.groups.get(groupid)
+        if group is None:
+            raise GroupDoesntExist()
+
+        game = await RDB.get_game_by_id(group.gameid)
+
+        game_queue = self.queues.get(game.gameid)
+        if game_queue is None:
+            game_queue = self.queues[game.gameid] = OrderedDict()
+
+        for queueid, queue in game_queue.items():
+            size = len(queue) + len(group.members)
+            if size < game.capacity:
+                queue.extend(group.members)
+                group.queueid = queueid
+                return
+            elif size == game.capacity:
+                queue.extend(group.members)
+                group.queueid = queueid
+                return queueid
+
+        queueid = uuid4()
+        self.queues[game.gameid][queueid] = group.members.copy()
+        group.queueid = queueid
+        if len(self.queues[game.gameid][queueid]) == game.capacity:
+            return queueid
+
+    @fake_async
+    def leave_queue(self, groupid, queueid):
+        group = self.groups.get(groupid)
+        if group is None:
+            raise GroupDoesntExist()
+
+        queue = self.queues.get(queueid)
+        if queue is None:
+            raise QueueDoesntExist()
+
+        for member in group.members:
+            queue.remove(member)
+
+    @fake_async
+    def msgqueue_push(self, userid, msg, msgid=None timestamp=None):
+        if msgid is None:
+            msgid = uuid4()
+        if timestamp is None:
+            timestamp = time()

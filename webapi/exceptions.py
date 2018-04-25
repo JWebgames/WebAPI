@@ -36,3 +36,29 @@ class ConfigMissingOptionError(ConfigError):
     template = "Options {{{}}} from block \"{}\" are missing."
     def __init__(self, missings, block):
         super().__init__(self.template.format(", ".join(missings), block))
+
+
+class DriverError(WebAPIError):
+    pass
+
+
+class GroupError(DriverError):
+    pass
+
+class GroupExists(GroupError, KeyError):
+    pass
+
+class GroupDoesntExist(GroupError, KeyError):
+    pass
+
+class PlayerInGroupAlready(GroupError, ValueError):
+    pass
+
+class PlayerNotInGroup(GroupError, ValueError):
+    pass
+
+class GroupInQueueAlready(GroupError):
+    pass
+
+class GroupIsFull(GroupError):
+    pass

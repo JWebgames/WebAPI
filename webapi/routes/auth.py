@@ -21,11 +21,8 @@ JWT_EXPIRATION_TIME = timedelta(timeparse(webapi.JWT_EXPIRATION_TIME))
 async def register(req, username, email, password):
     userid = uuid4()
     hashed_password = scrypt.encrypt(token_bytes(64), password)
-    await drivers.RDB.create_user(userid,
-                                   username,
-                                   email,
-                                   hashed_password,
-                                   isadmin=False)
+    await drivers.RDB.create_user(userid, username, email, hashed_password)
+    return json({})
 
 @bp.route("/login", methods=["POST"])
 @require_fields({"login", "password"})
