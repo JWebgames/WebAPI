@@ -257,7 +257,8 @@ class InMemory(KeyValueStore):
 
     async def join_queue(self, groupid):
         group = self.groups.get(groupid)
-        if group is None: raise GroupDoesntExist()
+        if group is None:
+            raise GroupDoesntExist()
 
         game = await RDB.get_game_by_id(group.gameid)
 
@@ -285,10 +286,12 @@ class InMemory(KeyValueStore):
     @fake_async
     def leave_queue(self, groupid, queueid):
         group = self.groups.get(groupid)
-        if group is None: raise GroupDoesntExist()
+        if group is None:
+            raise GroupDoesntExist()
 
         queue = self.queues.get(queueid)
-        if queue is None: raise QueueDoesntExist()
+        if queue is None:
+            raise QueueDoesntExist()
 
         for member in group.members:
             queue.remove(member)
