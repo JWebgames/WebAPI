@@ -14,7 +14,7 @@ from sanic.exceptions import SanicException,\
                              Forbidden
 from sanic.response import json
 from .storage import drivers
-from .config import webapi
+from . import config
 from .server import app
 
 logger = getLogger(__name__)
@@ -31,10 +31,10 @@ class ClientType(Enum):
 @app.middleware("request")
 def set_real_ip(req):
     """Replace the actual IP with the real IP of the client"""
-    if webapi.REVERSE_PROXY_IPS is None:
+    if config.webapi.REVERSE_PROXY_IPS is None:
         return
 
-    if ip_address(req.ip) in webapi.REVERSE_PROXY_IPS:
+    if ip_address(req.ip) in config.webapi.REVERSE_PROXY_IPS:
         header_xff = req.headers.get("X-Forwarded-For")
         if header_xff is not None:
             req.ip = header_xff.split(", ", 1)[0]
@@ -90,7 +90,7 @@ def authenticate(allowed_client_types: set):
                 raise Unauthorized("Bearer authorization type required")
 
             try:
-                jwt = jwtlib.decode(bearer[7:].strip(), webapi.JWT_SECRET, algorithms=['HS256'])
+                jwt = jwtlib.decode(bearer[7:].strip(), config.webapi.JWT_SECRET, algorithms=['HS256'])
             except jwtlib.exceptions.InvalidTokenError:
                 logger.log(45, f"Invalid token (IP: {req.ip})")
                 raise Forbidden("Invalid token")

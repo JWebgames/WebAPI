@@ -27,14 +27,17 @@ class TestRDB(TestCase):
             drivers.RDB = drivers.SQLite()
             drivers.KVS = drivers.InMemory()
 
+        userid = uuid4()
         lruc(drivers.RDB.create_user(
-            uuid4(), "toto", "toto@example.com", b"suchpasssword"))
+            userid, "toto", "toto@example.com", b"suchpasssword"))
         self.user = lruc(drivers.RDB.get_user_by_login("toto"))
-        lruc(drivers.RDB.create_game("bomberman", self.user.userid, 4))
-        self.game = lruc(drivers.RDB.get_game_by_name("bomberman"))
+        gameid = lruc(drivers.RDB.create_game("bomberman", self.user.userid, 4))
+        self.game = lruc(drivers.RDB.get_game_by_id(gameid))
 
     def tearDown(self):
         if webapi.PRODUCTION:
+            lruc(gather(drivers.RDB.conn.fetch("TRUNCATE tbusers"),
+                        drivers.RDV.conn.fetch("TRUNCATE tbgames")))
             lruc(gather(disconnect_from_postgres(None, loop),
                         disconnect_from_redis(None, loop)))
         else:
@@ -62,14 +65,17 @@ class TestKVS(TestCase):
             drivers.RDB = drivers.SQLite()
             drivers.KVS = drivers.InMemory()
 
+        userid = uuid4()
         lruc(drivers.RDB.create_user(
-            uuid4(), "toto", "toto@example.com", b"suchpasssword"))
-        self.user = lruc(drivers.RDB.get_user_by_login("toto"))
-        lruc(drivers.RDB.create_game("bomberman", self.user.userid, 4))
-        self.game = lruc(drivers.RDB.get_game_by_name("bomberman"))
+            userid, "toto", "toto@example.com", b"suchpasssword"))
+        self.user = lruc(drivers.RDB.get_user_by_id(userid))
+        gameid = lruc(drivers.RDB.create_game("bomberman", self.user.userid, 4))
+        self.game = lruc(drivers.RDB.get_game_by_id(gameid))
 
     def tearDown(self):
         if webapi.PRODUCTION:
+            lruc(gather(drivers.RDB.conn.fetch("TRUNCATE tbusers"),
+                        drivers.RDV.conn.fetch("TRUNCATE tbgames")))
             lruc(gather(disconnect_from_postgres(None, loop),
                         disconnect_from_redis(None, loop)))
         else:

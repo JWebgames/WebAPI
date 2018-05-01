@@ -89,6 +89,7 @@ def dryrun():
 
 @register
 def wizard():
+    setup()
     from . import admin
     admin.wizard()
 

@@ -8,13 +8,13 @@ from pytimeparse import parse as timeparse
 from sanic import Blueprint
 from sanic.exceptions import Forbidden
 from sanic.response import json
-from ..config import webapi
+from .. import config
 from ..middlewares import authenticate, require_fields, ClientType
 from ..storage import drivers 
 
 bp = Blueprint("auth")
 logger = getLogger(__name__)
-JWT_EXPIRATION_TIME = timedelta(timeparse(webapi.JWT_EXPIRATION_TIME))
+JWT_EXPIRATION_TIME = timedelta(timeparse(config.webapi.JWT_EXPIRATION_TIME))
 
 @bp.route("/register", methods=["POST"])
 @require_fields({"username", "email", "password"})
@@ -39,14 +39,14 @@ async def login(req, login, password):
         raise Forbidden("Wrong password")
 
     jwt = jwtlib.encode({
-        "iss": ClientType.WEBAPI.value,
+        "iss": ClientType.config.webapi.value,
         "sub": "webgames",
         "iat": datetime.utcnow(),
         "exp": datetime.utcnow() + JWT_EXPIRATION_TIME,
         "tid": str(uuid4()),
         "typ": ClientType.ADMIN.value if user["isadmin"] else ClientType.USER.value,
         "uid": str(user["userid"])
-    }, webapi.JWT_SECRET, algorithm='HS256')
+    }, config.webapi.JWT_SECRET, algorithm='HS256')
 
     return json({"token": jwt})
 

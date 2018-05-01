@@ -4,8 +4,8 @@ import logging
 from webapi.config import expose_default
 
 #logging.basicConfig(level=logging.DEBUG)
-logging.basicConfig(filename="/dev/null")
+logging.basicConfig(filename="test.log")
 logging.addLevelName(45, "SECURITY")
 
-expose_default()
-#expose_default(webapi={"PRODUCTION": True})
+#expose_default()
+expose_default(webapi={"PRODUCTION": True})

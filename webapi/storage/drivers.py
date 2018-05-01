@@ -91,7 +91,7 @@ class Postgres(RelationalDataBase):
             ("get_user_by_login", 1, User),
             ("set_user_admin", 2, None),
             ("set_user_verified", 2, None),
-            ("create_game", 3, Game),
+            ("create_game", 3, int),
             ("get_game_by_id", 1, Game),
             ("get_game_by_name", 1, Game),
             ("get_games_by_owner", 1, Game),
