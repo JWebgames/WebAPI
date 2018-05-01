@@ -1,6 +1,6 @@
 """Interfaces and implementation of databases drivers"""
 
-from collections import OrderedDict
+from collections import OrderedDict, Iterable
 from logging import getLogger
 from operator import methodcaller
 from os import listdir
@@ -9,13 +9,16 @@ from pathlib import Path
 from time import time
 from asyncpg import Record
 from sqlite3 import connect as sqlite3_connect
+from aioredis import Redis as RedisHighInterface
 from .models import User, Game, Group
 from ..tools import root, fake_async
 from ..exceptions import *
 from uuid import UUID, uuid4
 from time import time
+from typing import NewType
 
 logger = getLogger(__name__)
+AutoIncr = NewType("AutoIncr", int)
 
 RDB: "RelationalDataBase"
 KVS: "KeyValueStore"
@@ -91,7 +94,7 @@ class Postgres(RelationalDataBase):
             ("get_user_by_login", 1, User),
             ("set_user_admin", 2, None),
             ("set_user_verified", 2, None),
-            ("create_game", 3, int),
+            ("create_game", 3, AutoIncr),
             ("get_game_by_id", 1, Game),
             ("get_game_by_name", 1, Game),
             ("get_games_by_owner", 1, Game),
@@ -106,11 +109,12 @@ class Postgres(RelationalDataBase):
             async def wrapped(*args):
                 """Do the database call"""
                 rows = (await query.fetchrow(*args))[name]
-                if class_ is None:
+                if class_ is None or rows is None:
                     return rows
                 if isinstance(rows, Record):
                     return class_(**dict(rows.items()))
-                return map(lambda row: class_(**dict(row.items())), rows)
+                if isinstance(rows, Iterable):
+                    return map(lambda row: class_(**dict(row.items())), rows)
             return wrapped
 
         for name, args_count, class_ in functions:
@@ -133,6 +137,9 @@ class SQLite(RelationalDataBase):
                 rows = self.conn.cursor().execute(sql, args).fetchall()
                 if class_ is None:
                     return rows[0] if len(rows) == 1 else rows
+                if class_ is AutoIncr:
+                    query = "SELECT last_insert_rowid()"
+                    return self.conn.cursor().execute(query).fetchone()[0]
                 if len(rows) == 0:
                     return None
                 elif len(rows) == 1:
@@ -153,7 +160,7 @@ class SQLite(RelationalDataBase):
             ("get_user_by_login", User),
             ("set_user_admin", None),
             ("set_user_verified", None),
-            ("create_game", None),
+            ("create_game", AutoIncr),
             ("get_game_by_id", Game),
             ("get_game_by_name", Game),
             ("get_games_by_owner", Game),
@@ -175,7 +182,7 @@ class KeyValueStore():
         """Validate a non-expirated token"""
         raise NotImplementedError()
 
-    async def create_group(self, userid):
+    async def create_group(self, userid, gameid):
         raise NotImplementedError()
 
     async def join_group(self, groupid, userid):
@@ -196,15 +203,15 @@ class KeyValueStore():
 
 class Redis(KeyValueStore):
     """Implementation for Redis"""
-    def __init__(self, redis_conn):
-        self.conn = redis_conn
+    def __init__(self, redis_pool):
+        self.redis = RedisHighInterface(redis_pool)
 
     async def revoke_token(self, token) -> None:
-        await self.conn.zremrangebyscore("trl", 0, int(time()))
-        await self.conn.zadd("trl", token["exp"], token["tid"])
+        await self.redis.zremrangebyscore("trl", 0, int(time()))
+        await self.redis.zadd("trl", token["exp"], token["jti"])
 
     async def is_token_revoked(self, token_id) -> bool:
-        return await self.conn.zscore("trl", token_id) != None
+        return await self.redis.zscore("trl", token_id) != None
 
 
 class InMemory(KeyValueStore):
@@ -216,7 +223,7 @@ class InMemory(KeyValueStore):
 
     @fake_async
     def revoke_token(self, token):
-        self.token_revocation_list.append(token["tid"])
+        self.token_revocation_list.append(token["jti"])
 
     @fake_async
     def is_token_revoked(self, token_id) -> bool:
