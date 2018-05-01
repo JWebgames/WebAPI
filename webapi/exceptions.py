@@ -45,20 +45,23 @@ class DriverError(WebAPIError):
 class GroupError(DriverError):
     pass
 
-class GroupExists(GroupError, KeyError):
+class GroupExists(GroupError):
     pass
 
-class GroupDoesntExist(GroupError, KeyError):
+class GroupDoesntExist(GroupError):
     pass
 
-class PlayerInGroupAlready(GroupError, ValueError):
+class PlayerInGroupAlready(GroupError):
     pass
 
-class PlayerNotInGroup(GroupError, ValueError):
+class PlayerNotInGroup(GroupError):
     pass
 
 class GroupInQueueAlready(GroupError):
     pass
 
 class GroupIsFull(GroupError):
+    pass
+
+class GroupPlayingAlready(GroupError):
     pass
