@@ -69,7 +69,8 @@ def run():
         host=config.webapi.HOST,
         port=config.webapi.PORT,
         debug=not config.webapi.PRODUCTION,
-        ssl=ssl_context)
+        ssl=ssl_context,
+        access_log=not config.webapi.PRODUCTION)
 
 @register
 def dryrun():
