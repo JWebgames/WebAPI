@@ -54,7 +54,7 @@ def safe_http(request, exception):
     return HTTP status code according to sanic's error with the error
     contained in the 'error' json field
     """
-    logger.warning(str(exception), exc_info=exception)
+    logger.debug(str(exception), exc_info=exception)
     return json({"error": str(exception)}, exception.status_code)
 
 
@@ -66,7 +66,7 @@ def safe_sql(request, exception):
     return HTTP 400 'BadRequest' status code with the error
     contained in the 'error' field.
     """
-    logger.warning(str(exception), exc_info=exception)
+    logger.debug(str(exception), exc_info=exception)
     return json({"error": exception.args[0]}, 400)
 
 
@@ -95,7 +95,7 @@ def authenticate(allowed_client_types: set):
                 logger.log(45, f"Invalid token (IP: {req.ip})")
                 raise Forbidden("Invalid token")
 
-            if await drivers.KVS.is_token_revoked(jwt["tid"]):
+            if await drivers.KVS.is_token_revoked(jwt["jti"]):
                 logger.log(45, f"Token has been revoked (IP: {req.ip})")
                 raise Forbidden("Revoked token")
 
