@@ -13,7 +13,6 @@ from .routes.auth import bp as authbp
 
 logger = logging.getLogger(__name__)
 
-
 async def connect_to_postgres(_app, loop, prepare=True):
     """Connect to postgres and expose the connection object"""
     logger.info("Connecting to postgres...")
@@ -36,18 +35,18 @@ async def connect_to_redis(_app, loop):
     """Connect to redis and expose the connection object"""
     logger.info("Connecting to redis...")
     if config.redis.DSN is not None:
-        redisconn = await aioredis.create_pool(
+        redispool = await aioredis.create_pool(
             address=config.redis.DSN,
             loop=loop
         )
     else:
-        redisconn = await aioredis.create_pool(
+        redispool = await aioredis.create_pool(
             address=(config.redis.HOST, config.redis.PORT),
             db=config.redis.DATABASE,
             password=config.redis.PASSWORD,
             loop=loop
         )
-    drivers.KVS = drivers.Redis(redisconn)
+    drivers.KVS = drivers.Redis(redispool)
     logger.info("Connection to redis established.")
 
 
@@ -61,8 +60,8 @@ async def disconnect_from_postgres(_app, _loop):
 async def disconnect_from_redis(_app, _loop):
     """Safely disconnect from redis"""
     logger.info("Disconnecting from redis...")
-    drivers.KVS.conn.close()
-    await drivers.KVS.conn.wait_closed()
+    drivers.KVS.redis.close()
+    await drivers.KVS.redis.wait_closed()
     logger.info("Disconnected from redis")
 
 
