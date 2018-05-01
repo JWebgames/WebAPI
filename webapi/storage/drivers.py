@@ -189,6 +189,9 @@ class KeyValueStore():
 
     async def leave_queue(self, groupid):
         raise NotImplementedError()
+    
+    async def msgqueue_push(self, userid, msg, msgid, timestamp):
+        raise NotImplementedError()
 
 
 class Redis(KeyValueStore):
@@ -297,7 +300,7 @@ class InMemory(KeyValueStore):
             queue.remove(member)
 
     @fake_async
-    def msgqueue_push(self, userid, msg, msgid=None timestamp=None):
+    def msgqueue_push(self, userid, msg, msgid=None, timestamp=None):
         if msgid is None:
             msgid = uuid4()
         if timestamp is None:
