@@ -36,8 +36,8 @@ class TestRDB(TestCase):
 
     def tearDown(self):
         if webapi.PRODUCTION:
-            lruc(gather(drivers.RDB.conn.fetch("TRUNCATE tbusers"),
-                        drivers.RDV.conn.fetch("TRUNCATE tbgames")))
+            lruc(drivers.RDB.conn.fetch("TRUNCATE tbusers CASCADE"))
+            lruc(drivers.RDB.conn.fetch("TRUNCATE tbgames CASCADE"))
             lruc(gather(disconnect_from_postgres(None, loop),
                         disconnect_from_redis(None, loop)))
         else:
@@ -74,8 +74,8 @@ class TestKVS(TestCase):
 
     def tearDown(self):
         if webapi.PRODUCTION:
-            lruc(gather(drivers.RDB.conn.fetch("TRUNCATE tbusers"),
-                        drivers.RDV.conn.fetch("TRUNCATE tbgames")))
+            lruc(drivers.RDB.conn.fetch("TRUNCATE tbusers CASCADE"))
+            lruc(drivers.RDB.conn.fetch("TRUNCATE tbgames CASCADE"))
             lruc(gather(disconnect_from_postgres(None, loop),
                         disconnect_from_redis(None, loop)))
         else:
