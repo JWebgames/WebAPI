@@ -12,7 +12,12 @@ from sqlite3 import connect as sqlite3_connect
 from aioredis import Redis as RedisHighInterface
 from .models import User, Game, Group
 from ..tools import root, fake_async
-from ..exceptions import *
+from webapi.exceptions import PlayerInGroupAlready, \
+                              PlayerNotInGroup, \
+                              GroupDoesntExist, \
+                              GroupInQueueAlready, \
+                              GroupIsFull, \
+                              GroupPlayingAlready
 from uuid import UUID, uuid4
 from time import time
 from typing import NewType
@@ -127,6 +132,12 @@ class SQLite(RelationalDataBase):
         self.conn = sqlite3_connect(":memory:")
         sqldir = Path(root()).joinpath("storage", "sql_queries", "sqlite")
 
+        def fuck(namedtuple, idk):
+            plop = []
+            for idx, dq in enumerate(namedtuple._field_types.values()):
+                plop.append(dq(idk[idx]))
+            return plop
+
         def wrap(sql, class_=None):
             @fake_async
             def wrapped(*args):
@@ -143,8 +154,8 @@ class SQLite(RelationalDataBase):
                 if len(rows) == 0:
                     return None
                 elif len(rows) == 1:
-                    return class_(*rows[0])
-                return map(lambda row: class_(*row), rows)
+                    return class_(*fuck(class_, rows[0]))
+                return map(lambda row: class_(*fuck(class_, row)), rows)
             return wrapped
 
         create_tables = [
@@ -188,7 +199,7 @@ class KeyValueStore():
     async def join_group(self, groupid, userid):
         raise NotImplementedError()
 
-    async def leave_group(self, groupid, userid):
+    async def leave_group(self, userid):
         raise NotImplementedError()
 
     async def join_queue(self, groupid, game):
@@ -213,6 +224,61 @@ class Redis(KeyValueStore):
     async def is_token_revoked(self, token_id) -> bool:
         return await self.redis.zscore("trl", token_id) != None
 
+    async def create_group(self, userid, gameid):
+        user_map_key = "user_map:{!s}".format(userid)
+        if await self.redis.hget(user_map_key, "group") is not None:
+            raise PlayerInGroupAlready()
+        
+        groupid = uuid4()
+        await self.redis.hset(user_map_key, "group", str(groupid))
+
+        members_key = uuid4()
+        group_map_key = "group_map:{!s}".format(groupid)
+        await self.redis.hset(group_map_key, 
+                              "members_key", str(members_key),
+                              "gameid", str(gameid))
+
+        group_members_key = "group_members:{!s}".format(members_key)
+        await self.redis.sadd(group_members_key, str(userid))
+        return groupid
+    
+    async def join_group(self, groupid, userid):
+        user_map_key = "user_map:{!s}".format(userid)
+        if await self.redis.hget(user_map_key, "groupid") is not None:
+            raise PlayerInGroupAlready()
+        
+        group_map_key = "group_map:{!s}".format(groupid)
+        members_key, gameid, queueid, partyid = self.redis.hmget(
+            group_map_key, "members_key", "gameid", "queueid", "partyid")
+        
+        if gameid is None:
+            raise GroupDoesntExist()
+        if queueid is not None:
+            raise GroupInQueueAlready()
+        if partyid is not None:
+            raise GroupPlayingAlready()
+        
+        game = await RDB.get_game_by_id(gameid)
+        
+        group_members_key = "group_members:{!s}".format(members_key)
+        group_size = await self.redis.scard(group_members_key)
+        if group_size + 1 > game.capacity:
+            raise GroupIsFull()
+
+        await self.redis.sadd(members_key, str(userid))
+    
+    async def leave_group(self, userid):
+        groupid = await self.redis.hget("user_map:%s" % userid, "groupid")
+        if groupid is None:
+            raise PlayerNotInGroup()
+
+        members_key, queueid = await self.redis.hmget(
+            "group_map:%s" % groupid, "members_key", "queueid")
+        
+        if queueid is not None:
+            await self.leave_queue(groupid)
+
+        await self.redis.srem("group_members:%s" % members_key, userid)
 
 class InMemory(KeyValueStore):
     """Implementation database-free"""
@@ -220,6 +286,7 @@ class InMemory(KeyValueStore):
         self.token_revocation_list = []  # List[token_id: UUID]
         self.groups = {}  # Dict[group_id: UUID, NamedTuple[members: List[user_id: UUID], game_id: UUID, queue_id: UUID]]
         self.queues = {}  # Dict[str, OrderedDict[UUID, list]]
+        self.user_map = {}
 
     @fake_async
     def revoke_token(self, token):
@@ -236,6 +303,7 @@ class InMemory(KeyValueStore):
                 raise PlayerInGroupAlready()
 
         groupid = uuid4()
+        self.user_map[userid] = groupid
         self.groups[groupid] = Group([userid], gameid, None, None)
         return groupid
 
@@ -251,16 +319,19 @@ class InMemory(KeyValueStore):
         if len(group.members) + 1 > game.capacity:
             raise GroupIsFull()
 
+        self.user_map[userid] = groupid
         self.groups[groupid].members.append(userid)
 
     @fake_async
-    def leave_group(self, groupid, userid):
-        group = self.groups.get(groupid)
-        if groupid is None: raise GroupDoesntExist()
-        if userid not in group.members: raise PlayerNotInGroup()
-
+    def leave_group(self, userid):
+        groupid = self.user_map.get(userid)
+        if groupid is None:
+            raise PlayerNotInGroup()
+        
+        group = self.groups[groupid]
         if group.queueid is not None:
             self.leave_queue(self, groupid, group.queueid)
+        del self.user_map[userid]
         group.members.remove(userid)
         if not group.members:
             del self.groups[groupid]

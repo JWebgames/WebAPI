@@ -131,14 +131,6 @@ class TestKVS(TestCase):
                                                 self.game.gameid))
         coro = drivers.KVS.join_group(groupid, self.user.userid)
         self.assertRaises(PlayerInGroupAlready, lruc, coro)
-
-    def test_join_unknow_group(self):
-        """Joining an unknown (or dismissed) group must fail"""
-        groupid = lruc(drivers.KVS.create_group(self.user.userid,
-                                                self.game.gameid))
-        lruc(drivers.KVS.leave_group(groupid, self.user.userid))
-        coro = drivers.KVS.join_group(groupid, self.user.userid)
-        self.assertRaises(GroupDoesntExist, lruc, coro)
     
     def test_leave_group_not_beeing_in(self):
         """Leaving a group the user is not in must fail"""
@@ -146,8 +138,8 @@ class TestKVS(TestCase):
         groupid = lruc(drivers.KVS.create_group(self.user.userid,
                                                 self.game.gameid))
         lruc(drivers.KVS.join_group(groupid, player_2))
-        lruc(drivers.KVS.leave_group(groupid, self.user.userid))
-        coro = drivers.KVS.leave_group(groupid, self.user.userid)
+        lruc(drivers.KVS.leave_group(self.user.userid))
+        coro = drivers.KVS.leave_group(self.user.userid)
         self.assertRaises(PlayerNotInGroup, lruc, coro)
 
     def test_join_queued_group(self):
