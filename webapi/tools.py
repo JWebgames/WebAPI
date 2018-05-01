@@ -111,7 +111,7 @@ def generate_token(key, iat=None, exp_delta=timedelta(minutes=5), typ="player",
         "sub": "webgames",
         "iat": iat,
         "exp": iat + exp_delta,
-        "tid": tid,
+        "jti": tid,
         "typ": typ,
         "uid": uid
     }, key, algorithm='HS256').decode()
