@@ -19,6 +19,10 @@ class User(NamedTuple):
         return tmpl.format(**self._asdict())
 
 
+class LightGame(NamedTuple):
+    gameid: int
+    name: str
+
 class Game(NamedTuple):
     gameid: int
     name: str
@@ -29,11 +33,19 @@ class Game(NamedTuple):
 class Group():
     members: List[UUID]
     gameid: Optional[UUID]
-    queueid: Optional[UUID]
+    slotid: Optional[UUID]
     partyid: Optional[UUID]
 
-    def __init__(self, members, gameid, queueid, partyid):
+    def __init__(self, members, gameid, slotid, partyid):
         self.members = members
         self.gameid = gameid
-        self.queueid = queueid
+        self.slotid = slotid
         self.partyid = partyid
+
+    def asdict():
+        return {
+            "members": list(map(str, self.members)),
+            "gameid": str(self.gameid),
+            "slotid": str(self.slotid),
+            "partyid": str(self.partyid)
+        }
