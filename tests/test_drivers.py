@@ -44,6 +44,7 @@ class TestRDB(TestCase):
             if webapi.PRODUCTION:
                 lruc(drivers.RDB.conn.fetch("TRUNCATE tbusers CASCADE"))
                 lruc(drivers.RDB.conn.fetch("TRUNCATE tbgames CASCADE"))
+                lruc(drivers.KVS.redis.flushdb())
                 lruc(gather(disconnect_from_postgres(None, loop),
                             disconnect_from_redis(None, loop)))
             else:
@@ -88,6 +89,7 @@ class TestKVS(TestCase):
             if webapi.PRODUCTION:
                 lruc(drivers.RDB.conn.fetch("TRUNCATE tbusers CASCADE"))
                 lruc(drivers.RDB.conn.fetch("TRUNCATE tbgames CASCADE"))
+                lruc(drivers.KVS.redis.flushdb())
                 lruc(gather(disconnect_from_postgres(None, loop),
                             disconnect_from_redis(None, loop)))
             else:
@@ -161,7 +163,7 @@ class TestKVS(TestCase):
         player_2 = uuid4()
         groupid = lruc(drivers.KVS.create_group(self.user.userid,
                                                 self.game.gameid))
-        lruc(drivers.KVS.join_queue(groupid, ))
+        lruc(drivers.KVS.join_queue(groupid))
         coro = drivers.KVS.join_group(groupid, player_2)
         self.assertRaises(GroupInQueueAlready, lruc, coro)
 
