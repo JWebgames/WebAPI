@@ -1,5 +1,6 @@
 from asyncio import get_event_loop, gather
 from uuid import uuid4, UUID
+from logging import getLogger
 from unittest import TestCase
 
 from webapi.config import webapi
@@ -15,33 +16,44 @@ from webapi.exceptions import PlayerInGroupAlready, \
 
 
 loop = get_event_loop()
+logger = getLogger(__name__)
 
 
 class TestRDB(TestCase):
     """Test case for storage.drivers.RelationalDB"""
     def setUp(self):
-        if webapi.PRODUCTION:
-            lruc(gather(connect_to_postgres(None, loop),
-                        connect_to_redis(None, loop)))
-        else:
-            drivers.RDB = drivers.SQLite()
-            drivers.KVS = drivers.InMemory()
+        try:
+            if webapi.PRODUCTION:
+                lruc(gather(connect_to_postgres(None, loop),
+                            connect_to_redis(None, loop)))
+            else:
+                drivers.RDB = drivers.SQLite()
+                drivers.KVS = drivers.InMemory()
 
-        lruc(drivers.RDB.create_user(
-            uuid4(), "toto", "toto@example.com", b"suchpasssword"))
-        self.user = lruc(drivers.RDB.get_user_by_login("toto"))
-        lruc(drivers.RDB.create_game("bomberman", self.user.userid, 4))
-        self.game = lruc(drivers.RDB.get_game_by_name("bomberman"))
+            userid = uuid4()
+            lruc(drivers.RDB.create_user(
+                userid, "toto", "toto@example.com", b"suchpasssword"))
+            self.user = lruc(drivers.RDB.get_user_by_login("toto"))
+            gameid = lruc(drivers.RDB.create_game("bomberman", self.user.userid, 4))
+            self.game = lruc(drivers.RDB.get_game_by_id(gameid))
+        except:
+            logger.exception("Error in setUp RDB")
 
     def tearDown(self):
-        if webapi.PRODUCTION:
-            lruc(gather(disconnect_from_postgres(None, loop),
-                        disconnect_from_redis(None, loop)))
-        else:
-            drivers.RDB.conn.close()
+        try:
+            if webapi.PRODUCTION:
+                lruc(drivers.RDB.conn.fetch("TRUNCATE tbusers CASCADE"))
+                lruc(drivers.RDB.conn.fetch("TRUNCATE tbgames CASCADE"))
+                lruc(drivers.KVS.redis.flushdb())
+                lruc(gather(disconnect_from_postgres(None, loop),
+                            disconnect_from_redis(None, loop)))
+            else:
+                drivers.RDB.conn.close()
 
-        self.user = None
-        self.game = None
+            self.user = None
+            self.game = None
+        except:
+            logger.exception("Error in teamDown RDB")
 
     def test_create_retrieve_user(self):
         """Create a user and retrieve him, they should be the same"""
@@ -55,28 +67,38 @@ class TestRDB(TestCase):
 class TestKVS(TestCase):
     """Test case for storage.drivers.KeyValueStore"""
     def setUp(self):
-        if webapi.PRODUCTION:
-            lruc(gather(connect_to_postgres(None, loop),
-                        connect_to_redis(None, loop)))
-        else:
-            drivers.RDB = drivers.SQLite()
-            drivers.KVS = drivers.InMemory()
+        try:
+            if webapi.PRODUCTION:
+                lruc(gather(connect_to_postgres(None, loop),
+                            connect_to_redis(None, loop)))
+            else:
+                drivers.RDB = drivers.SQLite()
+                drivers.KVS = drivers.InMemory()
 
-        lruc(drivers.RDB.create_user(
-            uuid4(), "toto", "toto@example.com", b"suchpasssword"))
-        self.user = lruc(drivers.RDB.get_user_by_login("toto"))
-        lruc(drivers.RDB.create_game("bomberman", self.user.userid, 4))
-        self.game = lruc(drivers.RDB.get_game_by_name("bomberman"))
+            userid = uuid4()
+            lruc(drivers.RDB.create_user(
+                userid, "toto", "toto@example.com", b"suchpasssword"))
+            self.user = lruc(drivers.RDB.get_user_by_id(userid))
+            gameid = lruc(drivers.RDB.create_game("bomberman", self.user.userid, 4))
+            self.game = lruc(drivers.RDB.get_game_by_id(gameid))
+        except:
+            logger.exception("Error in setUp KVS")
 
     def tearDown(self):
-        if webapi.PRODUCTION:
-            lruc(gather(disconnect_from_postgres(None, loop),
-                        disconnect_from_redis(None, loop)))
-        else:
-            drivers.RDB.conn.close()
+        try:
+            if webapi.PRODUCTION:
+                lruc(drivers.RDB.conn.fetch("TRUNCATE tbusers CASCADE"))
+                lruc(drivers.RDB.conn.fetch("TRUNCATE tbgames CASCADE"))
+                lruc(drivers.KVS.redis.flushdb())
+                lruc(gather(disconnect_from_postgres(None, loop),
+                            disconnect_from_redis(None, loop)))
+            else:
+                drivers.RDB.conn.close()
 
-        self.user = None
-        self.game = None
+            self.user = None
+            self.game = None
+        except:
+            logger.exception("Error in tearDown KVS")
 
     def test_start_game(self):
         """Make a match out of several groups of players"""
@@ -125,14 +147,6 @@ class TestKVS(TestCase):
                                                 self.game.gameid))
         coro = drivers.KVS.join_group(groupid, self.user.userid)
         self.assertRaises(PlayerInGroupAlready, lruc, coro)
-
-    def test_join_unknow_group(self):
-        """Joining an unknown (or dismissed) group must fail"""
-        groupid = lruc(drivers.KVS.create_group(self.user.userid,
-                                                self.game.gameid))
-        lruc(drivers.KVS.leave_group(groupid, self.user.userid))
-        coro = drivers.KVS.join_group(groupid, self.user.userid)
-        self.assertRaises(GroupDoesntExist, lruc, coro)
     
     def test_leave_group_not_beeing_in(self):
         """Leaving a group the user is not in must fail"""
@@ -140,8 +154,8 @@ class TestKVS(TestCase):
         groupid = lruc(drivers.KVS.create_group(self.user.userid,
                                                 self.game.gameid))
         lruc(drivers.KVS.join_group(groupid, player_2))
-        lruc(drivers.KVS.leave_group(groupid, self.user.userid))
-        coro = drivers.KVS.leave_group(groupid, self.user.userid)
+        lruc(drivers.KVS.leave_group(self.user.userid))
+        coro = drivers.KVS.leave_group(self.user.userid)
         self.assertRaises(PlayerNotInGroup, lruc, coro)
 
     def test_join_queued_group(self):

@@ -1,9 +1,11 @@
 """Entrypoint load configuration, setup logging and start the server"""
 
 import asyncio
+import atexit
 import logging
 import ssl
 from argparse import ArgumentParser
+from functools import partial
 from getpass import getpass
 from sys import argv, exit as sysexit
 from asyncpg.exceptions import PostgresConnectionError, InvalidAuthorizationSpecificationError
@@ -69,7 +71,8 @@ def run():
         host=config.webapi.HOST,
         port=config.webapi.PORT,
         debug=not config.webapi.PRODUCTION,
-        ssl=ssl_context)
+        ssl=ssl_context,
+        access_log=not config.webapi.PRODUCTION)
 
 @register
 def dryrun():
@@ -85,10 +88,11 @@ def dryrun():
     else:
         future = asyncio.gather(server.disconnect_from_postgres(None, loop),
                                 server.disconnect_from_redis(None, loop))
-        loop.run_until_complete(future)
+        atexit.register(partial(loop.run_until_complete, future))
 
 @register
 def wizard():
+    setup()
     from . import admin
     admin.wizard()
 

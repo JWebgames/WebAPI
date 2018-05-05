@@ -6,21 +6,21 @@ import jwt as jwtlib
 import scrypt
 from pytimeparse import parse as timeparse
 from sanic import Blueprint
-from sanic.exceptions import Forbidden
+from sanic.exceptions import Forbidden, NotFound
 from sanic.response import json
-from ..config import webapi
+from .. import config
 from ..middlewares import authenticate, require_fields, ClientType
 from ..storage import drivers 
 
 bp = Blueprint("auth")
 logger = getLogger(__name__)
-JWT_EXPIRATION_TIME = timedelta(timeparse(webapi.JWT_EXPIRATION_TIME))
+JWT_EXPIRATION_TIME = timedelta(timeparse(config.webapi.JWT_EXPIRATION_TIME))
 
 @bp.route("/register", methods=["POST"])
 @require_fields({"username", "email", "password"})
 async def register(req, username, email, password):
     userid = uuid4()
-    hashed_password = scrypt.encrypt(token_bytes(64), password)
+    hashed_password = scrypt.encrypt(token_bytes(64), password, maxtime=0.1)
     await drivers.RDB.create_user(userid, username, email, hashed_password)
     return json({})
 
@@ -33,7 +33,7 @@ async def login(req, login, password):
         raise NotFound("User not found")
 
     try:
-        scrypt.decrypt(password, user.password, maxtime=0.5)
+        scrypt.decrypt(user.password, password, encoding=None)
     except scrypt.error:
         logger.log(45, "Wrong password for user %s (IP: %s)", user.name, req.ip)
         raise Forbidden("Wrong password")
@@ -43,10 +43,10 @@ async def login(req, login, password):
         "sub": "webgames",
         "iat": datetime.utcnow(),
         "exp": datetime.utcnow() + JWT_EXPIRATION_TIME,
-        "tid": str(uuid4()),
-        "typ": ClientType.ADMIN.value if user["isadmin"] else ClientType.USER.value,
-        "uid": str(user["userid"])
-    }, webapi.JWT_SECRET, algorithm='HS256')
+        "jti": str(uuid4()),
+        "typ": ClientType.ADMIN.value if user.isadmin else ClientType.USER.value,
+        "uid": str(user.userid)
+    }, config.webapi.JWT_SECRET, algorithm='HS256')
 
     return json({"token": jwt})
 
