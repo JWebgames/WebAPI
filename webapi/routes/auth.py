@@ -14,7 +14,7 @@ from ..storage import drivers
 
 bp = Blueprint("auth")
 logger = getLogger(__name__)
-JWT_EXPIRATION_TIME = timedelta(timeparse(config.webapi.JWT_EXPIRATION_TIME))
+JWT_EXPIRATION_TIME = timedelta(seconds=timeparse(config.webapi.JWT_EXPIRATION_TIME))
 
 @bp.route("/register", methods=["POST"])
 @require_fields({"username", "email", "password"})
@@ -22,7 +22,8 @@ async def register(req, username, email, password):
     userid = uuid4()
     hashed_password = scrypt.encrypt(token_bytes(64), password, maxtime=0.1)
     await drivers.RDB.create_user(userid, username, email, hashed_password)
-    return json({})
+    logger.info("Account created: %s", userid)
+    return json({"userid": str(userid)})
 
 @bp.route("/login", methods=["POST"])
 @require_fields({"login", "password"})
@@ -44,10 +45,12 @@ async def login(req, login, password):
         "iat": datetime.utcnow(),
         "exp": datetime.utcnow() + JWT_EXPIRATION_TIME,
         "jti": str(uuid4()),
-        "typ": ClientType.ADMIN.value if user.isadmin else ClientType.USER.value,
-        "uid": str(user.userid)
+        "typ": ClientType.ADMIN.value if user.isadmin else ClientType.PLAYER.value,
+        "uid": str(user.userid),
+        "nic": user.name
     }, config.webapi.JWT_SECRET, algorithm='HS256')
 
+    logger.info("User connected: %s", user.userid)
     return json({"token": jwt})
 
 
@@ -55,4 +58,5 @@ async def login(req, login, password):
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
 async def logout(req, jwt):
     await drivers.KVS.revoke_token(jwt)
+    logger.info("User disconnected: %s", jwt["jti"])
     return json({})
