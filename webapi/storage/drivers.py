@@ -202,7 +202,7 @@ class KeyValueStore():
     async def leave_group(self, userid):
         raise NotImplementedError()
 
-    async def join_queue(self, groupid, game):
+    async def join_queue(self, groupid):
         raise NotImplementedError()
 
     async def leave_queue(self, groupid):
@@ -226,17 +226,17 @@ class Redis(KeyValueStore):
 
     async def create_group(self, userid, gameid):
         user_map_key = "user_map:{!s}".format(userid)
-        if await self.redis.hget(user_map_key, "group") is not None:
+        if await self.redis.hget(user_map_key, "groupid") is not None:
             raise PlayerInGroupAlready()
         
         groupid = uuid4()
-        await self.redis.hset(user_map_key, "group", str(groupid))
+        await self.redis.hset(user_map_key, "groupid", str(groupid))
 
         members_key = uuid4()
         group_map_key = "group_map:{!s}".format(groupid)
-        await self.redis.hset(group_map_key, 
+        await self.redis.hmset(group_map_key, 
                               "members_key", str(members_key),
-                              "gameid", str(gameid))
+                              "gameid", gameid)
 
         group_members_key = "group_members:{!s}".format(members_key)
         await self.redis.sadd(group_members_key, str(userid))
@@ -248,7 +248,7 @@ class Redis(KeyValueStore):
             raise PlayerInGroupAlready()
         
         group_map_key = "group_map:{!s}".format(groupid)
-        members_key, gameid, queueid, partyid = self.redis.hmget(
+        members_key, gameid, queueid, partyid = await self.redis.hmget(
             group_map_key, "members_key", "gameid", "queueid", "partyid")
         
         if gameid is None:
@@ -258,17 +258,18 @@ class Redis(KeyValueStore):
         if partyid is not None:
             raise GroupPlayingAlready()
         
-        game = await RDB.get_game_by_id(gameid)
+        game = await RDB.get_game_by_id(int(gameid))
         
         group_members_key = "group_members:{!s}".format(members_key)
         group_size = await self.redis.scard(group_members_key)
-        if group_size + 1 > game.capacity:
+        if group_size + 2 > game.capacity:
             raise GroupIsFull()
 
-        await self.redis.sadd(members_key, str(userid))
+        await self.redis.sadd(group_members_key, str(userid))
     
     async def leave_group(self, userid):
-        groupid = await self.redis.hget("user_map:%s" % userid, "groupid")
+        user_map_key = "user_map:{!s}".format(userid)
+        groupid = await self.redis.hget(user_map_key , "groupid")
         if groupid is None:
             raise PlayerNotInGroup()
 
@@ -278,7 +279,8 @@ class Redis(KeyValueStore):
         if queueid is not None:
             await self.leave_queue(groupid)
 
-        await self.redis.srem("group_members:%s" % members_key, userid)
+        await self.redis.hdel(user_map_key, "groupid")
+        await self.redis.srem("group_members:%s" % members_key, str(userid))
 
 class InMemory(KeyValueStore):
     """Implementation database-free"""
