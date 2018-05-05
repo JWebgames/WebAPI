@@ -16,6 +16,7 @@ from sanic.response import json
 from .storage import drivers
 from . import config
 from .server import app
+from .exceptions import WebAPIError
 
 logger = getLogger(__name__)
 
@@ -45,6 +46,17 @@ def set_real_ip(req):
             req.ip = header_xri
             return
 
+@app.exception(WebAPIError)
+def safe_webapi(request, exception):
+    """
+    Escape API exceptions
+
+    return HTTP 400 'BadRequest' status code with the error
+    contained in the 'error' field.
+    """
+    logger.debug(str(exception), exc_info=True)
+    return json({"error": str(exception)}, 400)
+
 
 @app.exception(SanicException)
 def safe_http(request, exception):
@@ -54,7 +66,7 @@ def safe_http(request, exception):
     return HTTP status code according to sanic's error with the error
     contained in the 'error' json field
     """
-    logger.debug(str(exception), exc_info=exception)
+    logger.debug(str(exception), exc_info=True)
     return json({"error": str(exception)}, exception.status_code)
 
 
@@ -66,7 +78,7 @@ def safe_sql(request, exception):
     return HTTP 400 'BadRequest' status code with the error
     contained in the 'error' field.
     """
-    logger.debug(str(exception), exc_info=exception)
+    logger.debug(str(exception), exc_info=True)
     return json({"error": exception.args[0]}, 400)
 
 
@@ -123,9 +135,9 @@ def require_fields(fields: set):
             if header_ct is None or "application/json" not in header_ct:
                 raise InvalidUsage("JSON required")
             if not fields:
-                pass
+                return await func(req, *args, **kwargs)
             if not isinstance(req.json, dict):
-                raise InvalidUsage("JSON object required")
+                raise InvalidUsage("JSON object required.")
 
             template = "Fields {{{}}} are missing"
             if not req.json:

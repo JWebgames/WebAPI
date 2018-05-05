@@ -4,11 +4,11 @@ from collections import Iterable
 
 
 class WebAPIError(Exception):
-    """Base class for any error"""
+    """Base class for any api error"""
     pass
 
 
-class ConfigError(WebAPIError):
+class ConfigError(Exception):
     """Base class for any configuration error"""
     pass
 
@@ -37,12 +37,7 @@ class ConfigMissingOptionError(ConfigError):
     def __init__(self, missings, block):
         super().__init__(self.template.format(", ".join(missings), block))
 
-
-class DriverError(WebAPIError):
-    pass
-
-
-class GroupError(DriverError):
+class GroupError(WebAPIError):
     pass
 
 class GroupExists(GroupError):
