@@ -49,3 +49,17 @@ class Group():
             "slotid": str(self.slotid),
             "partyid": str(self.partyid)
         }
+
+class UserKVS:
+    groupid: Optional[UUID]
+    is_ready: bool
+
+    def __ini__(self, groupid, ready):
+        self.groupid = groupid
+        self.ready = ready
+    
+    def asdict():
+        return {
+            "groupid": str(self.groupid),
+            "ready": self.ready
+        }

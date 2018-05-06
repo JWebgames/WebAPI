@@ -225,6 +225,7 @@ class Redis(KeyValueStore):
     """Implementation for Redis"""
 
     user_groupid_key = "users:{!s}:groupid"
+    user_ready_key = "users:{!s}:ready"
     group_gameid_key = "groups:{!s}:gameid"
     group_slotid_key = "groups:{!s}:slotid"
     group_partyid_key = "groups:{!s}:partyid"
@@ -305,28 +306,51 @@ class Redis(KeyValueStore):
 
         return Group(list(map(UUID, members)),
                      gameid and UUID(gameid),
-                     slotid and UUID(slotid)
+                     slotid and UUID(slotid),
                      partyid and UUID(partyid))
 
+    async def is_ready(self, userid):
+        return (await self.redis.get(Redis.user_ready_key.format(userid))) == b"1"
 
-    async def join_queue(self, userid):
+    async def clear_ready(self, userid):
         user_groupid_key = Redis.user_groupid_key.format(userid)
         groupid = await self.redis.get(user_groupid_key)
         if groupid is None:
             raise PlayerNotInGroup()
+        groupid = groupid.decode()
+        
+        await self.redis.delete(Redis.user_ready_key.format(userid))
 
-        gameid = await self.redis.get(Redis.group_gameid_key.format(groupid))
-        if gameid is None:
-            raise GroupDoesntExist()
-        gameid = int(gameid)
+
+    async def set_ready(self, userid, callback_when_all_ready):
+        user_groupid_key = Redis.user_groupid_key.format(userid)
+        groupid = await self.redis.get(user_groupid_key)
+        if groupid is None:
+            raise PlayerNotInGroup()
+        groupid = groupid.decode()
+        
+        await self.redis.set(Redis.user_ready_key.format(userid), 1)
+    
+    async def is_group_ready(self, groupid)
+        group_members_key = Redis.group_members_key.format(groupid)
+        members = list(map(methodcaller("decode"),
+                           await self.redis.smembers(group_members_key)))
+
+        coros = [self.is_ready(memberid) for memberid in members]
+        if all(await asyncio.gather(coros)):
+            coros = [self.redis.delete(Redis.user_ready_key.format(memberid))
+                     for memberid in members]
+            await asyncio.gather(coros)
+            asyncio.ensure_future(callback_when_all_ready)
+
+
+    async def join_queue(self, groupid):
+        gameid = int(await self.redis.get(Redis.group_gameid_key.format(groupid)))
         if (await self.redis.get(Redis.group_partyid_key.format(groupid))) is not None:
             raise GroupPlayingAlready()
         if (await self.redis.get(Redis.group_slotid_key.format(groupid))) is not None:
             raise GroupInQueueAlready()
 
-        return self._join_queue(groupid, gameid)  # Coroutine /!\
-
-    async def _join_queue(self, groupid, gameid):
         game = await RDB.get_game_by_id(gameid)
         group_members_key = Redis.group_members_key.format(groupid)
         group_members = await self.redis.smembers(group_members_key)
@@ -440,11 +464,7 @@ class InMemory(KeyValueStore):
             raise PlayerNotInGroup()
         return self.groups[groupid]
 
-    async def join_queue(self, userid):
-        groupid = self.user_map.get(userid)
-        if groupid is None:
-            raise PlayerNotInGroup()
-
+    async def join_queue(self, groupid):
         group = self.groups.get(groupid)
         if group is None:
             raise GroupDoesntExist()

@@ -26,5 +26,11 @@ async def leave(req, jwt):
 @bp.route("/<groupid>", methods=["GET"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
 async def group_state(req, groupid, jwt):
-    group = await drivers.KVS.get_group(jwt["uid"]
+    group = await drivers.KVS.get_group(jwt["uid"])
     return json(group.asdict())
+
+@bp.route("/ready", methods=["GET"])
+@authenticate({ClientType.PLAYER, ClientType.ADMIN})
+async def ready(req, jwt):
+    await drivers.KVS.is_ready(jwt["uid"])
+    return json({})
