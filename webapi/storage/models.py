@@ -51,7 +51,7 @@ class Game(NamedTuple):
 class Group:
     state: State
     members: List[UUID]
-    gameid: Optional[UUID]
+    gameid: UUID
     slotid: Optional[UUID]
     partyid: Optional[UUID]
 
@@ -67,22 +67,25 @@ class Group:
             "state": self.state.value,
             "members": list(map(str, self.members)),
             "gameid": str(self.gameid),
-            "slotid": str(self.slotid),
-            "partyid": str(self.partyid)
+            "slotid": self.slotid and str(self.slotid),
+            "partyid": self.partyid and str(self.partyid)
         }
 
 
 class UserKVS:
     groupid: Optional[UUID]
+    partyid: Optional[UUID]
     ready: bool
 
-    def __init__(self, groupid, ready):
+    def __init__(self, groupid, partyid, ready):
         self.groupid = groupid
+        self.partyid = partyid
         self.ready = ready
     
     def asdict():
         return {
-            "groupid": str(self.groupid),
+            "groupid": self.groupid and str(self.groupid),
+            "partyid": self.partyid and str(self.partyid),
             "ready": self.ready
         }
 

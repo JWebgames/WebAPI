@@ -40,6 +40,9 @@ class ConfigMissingOptionError(ConfigError):
 class GroupError(WebAPIError):
     pass
 
+class GameDoesntExist(GroupError):
+    pass
+
 class GroupDoesntExist(GroupError):
     pass
 
@@ -59,9 +62,9 @@ class WrongGroupState(GroupError):
     def __init__(self, current, wanted):
         if isinstance(wanted, Iterable):
             super().__init__(self, "Current: {}. Require: {{{}}}".format(
-                current, ", ".join(map(str, wanted))
+                current.name, ", ".join([w.name for w in wanted])
             ))
         else:
             super().__init__(self, "Current: {}. Require: {}".format(
-                current, wanted
+                current.name, wanted.name
             ))

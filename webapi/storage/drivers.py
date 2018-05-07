@@ -1,6 +1,6 @@
 """Interfaces and implementation of databases drivers"""
 
-from asyncio import ensure_future
+from asyncio import ensure_future, gather
 from collections import OrderedDict, Iterable
 from logging import getLogger
 from operator import methodcaller
@@ -18,7 +18,8 @@ from webapi.exceptions import PlayerInGroupAlready, \
                               GroupDoesntExist, \
                               GroupIsFull, \
                               GroupNotReady, \
-                              WrongGroupState
+                              WrongGroupState, \
+                              GameDoesntExist
 from uuid import UUID, uuid4
 from time import time
 from typing import NewType
@@ -114,7 +115,7 @@ class Postgres(RelationalDataBase):
                 sqlargs = ", $".join(map(str, range(1, argscnt + 1)))
                 query = await self.conn.prepare("SELECT %s($%s)" % (name, sqlargs))
             else:
-                query = await self.conn.prepare("SELECT %s" % name)
+                query = await self.conn.prepare("SELECT %s()" % name)
 
             async def wrapped(*args):
                 """Do the database call"""
@@ -248,13 +249,15 @@ class Redis(KeyValueStore):
 
     user_groupid_key = "users:{!s}:groupid"
     user_ready_key = "users:{!s}:ready"
+    user_partyid_key = "users:{!s}:partyid"
+    group_state_key = "groups:{!s}:state"
+    group_members_key = "groups:{!s}:members"
     group_gameid_key = "groups:{!s}:gameid"
     group_slotid_key = "groups:{!s}:slotid"
     group_partyid_key = "groups:{!s}:partyid"
-    group_members_key = "groups:{!s}:members"
     game_queue_key = "queues:{!s}"
-    slot_key = "slots:{!s}"
-    party_slotid_key = "parties:{!s}:slotid"
+    slot_players_key = "slots:{!s}:players"
+    slot_groups_key = "slots:{!s}:groups"
 
     def __init__(self, redis_pool):
         self.redis = RedisHighInterface(redis_pool)
@@ -272,86 +275,128 @@ class Redis(KeyValueStore):
         if groupid is not None:
             raise PlayerInGroupAlready()
         
+        if (await RDB.get_game_by_id(gameid)) is None:
+            raise GameDoesntExist()
+        
         groupid = uuid4()
         await self.redis.set(user_groupid_key, str(groupid))
+        await self.redis.set(Redis.user_ready_key.format(userid), b"0")
         await self.redis.set(
-            Redis.group_gameid_key.format(groupid), gameid)
+            Redis.group_state_key.format(groupid), State.GROUP_CHECK.value)
+        await self.redis.set(
+            Redis.group_gameid_key.format(groupid), str(gameid))
         await self.redis.sadd(
             Redis.group_members_key.format(groupid), str(userid))
 
         return groupid
     
     async def join_group(self, groupid, userid):
-        if (await self.redis.get(Redis.user_groupid_key.format(userid))) is not None:
+        user_groupid_key = Redis.user_groupid_key.format(userid)
+        if (await self.redis.get(user_groupid_key)) is not None:
             raise PlayerInGroupAlready()
-        if (await self.redis.get(Redis.group_partyid_key.format(groupid))) is not None:
-            raise GroupPlayingAlready()
-        if (await self.redis.get(Redis.group_slotid_key.format(groupid))) is not None:
-            raise GroupInQueueAlready()
-        
+
         gameid = await self.redis.get(Redis.group_gameid_key.format(groupid))
         if gameid is None:
             raise GroupDoesntExist()
-        game = await RDB.get_game_by_id(int(gameid))
-        
+
+        state = State(await self.redis.get(
+            Redis.group_state_key.format(groupid)))
+        if state != State.GROUP_CHECK:
+            raise WrongGroupState(state, State.GROUP_CHECK)
+
+        game = await RDB.get_game_by_id(int(gameid))        
         group_members_key = Redis.group_members_key.format(groupid)
         group_size = await self.redis.scard(group_members_key)
         if group_size + 1 > game.capacity:
             raise GroupIsFull()
 
+        await self.redis.set(user_groupid_key, str(groupid))
         await self.redis.sadd(group_members_key, str(userid))
+        await self.redis.set(Redis.user_ready_key.format(userid), b"0")
     
     async def leave_group(self, userid):
         user_groupid_key = Redis.user_groupid_key.format(userid)
         groupid = await self.redis.get(user_groupid_key)
         if groupid is None:
             raise PlayerNotInGroup()
-        if (await self.redis.get(Redis.group_partyid_key.format(groupid))) is not None:
-            raise GroupPlayingAlready()
+        groupid = groupid.decode()
 
-        if (await self.redis.get(Redis.group_slotid_key.format(userid))) is not None:
+        state = State(await self.redis.get(
+            Redis.group_state_key.format(groupid)))
+        valids = [State.GROUP_CHECK, State.IN_QUEUE]
+        if state not in valids:
+            raise WrongGroupState(state, valids)
+        if state == State.IN_QUEUE:
             await self.leave_queue(groupid)
 
         await self.redis.delete(user_groupid_key)
-        await self.redis.srem(Redis.group_members_key.format(groupid), str(userid))
+        await self.redis.srem(
+            Redis.group_members_key.format(groupid), str(userid))
+
+        ensure_future(self.group_cleanup(groupid))
+    
+    async def group_cleanup(groupid):
+        if (await self.scard(group_members_key)) == 0:
+            await gather([
+                self.redis.delete(Redis.group_gameid_key.format(groupid)),
+                self.redis.delete(Redis.group_state_key.format(groupid)),
+                self.redis.delete(Redis.group_slotid_key.format(groupid)),
+                self.redis.delete(Redis.group_partyid_key.format(groupid))
+            ])
     
     async def get_group(self, userid):
         user_groupid_key = Redis.user_groupid_key.format(userid)
         groupid = await self.redis.get(user_groupid_key)
         if groupid is None:
             raise PlayerNotInGroup()
+        groupid = groupid.decode()
     
+        state = await self.redis.get(Redis.group_state_key.format(groupid))
         gameid = await self.redis.get(Redis.group_gameid_key.format(groupid))
-        slotid = await self.redis.get(Redis.group_slotid_key.format(userid))
+        slotid = await self.redis.get(Redis.group_slotid_key.format(groupid))
         partyid = await self.redis.get(Redis.group_partyid_key.format(groupid))
         members = await self.redis.smembers(Redis.group_members_key.format(groupid))
 
-        return Group(list(map(UUID, members)),
+        return Group(State(state),
+                     list(map(UUID, members)),
                      gameid and UUID(gameid),
                      slotid and UUID(slotid),
                      partyid and UUID(partyid))
 
+    async def mark_as_ready(self, userid):
+        user_groupid_key = Redis.user_groupid_key.format(userid)
+        groupid = await self.redis.get(user_groupid_key)
+        if groupid is None:
+            raise PlayerNotInGroup()
+        groupid = groupid.decode()
+
+        state = State(await self.redis.get(
+            Redis.group_state_key.format(groupid)))
+        valids = [State.GROUP_CHECK, State.PARTY_CHECK]
+        if state not in valids:
+            raise WrongGroupState(state, valids)
+        
+        await self.redis.set(Redis.user_ready_key.format(userid), b"1")
+
+    async def mark_as_not_ready(self, userid):
+        user_groupid_key = Redis.user_groupid_key.format(userid)
+        groupid = await self.redis.get(user_groupid_key)
+        if groupid is None:
+            raise PlayerNotInGroup()
+        groupid = groupid.decode()
+
+        state = State(await self.redis.get(
+            Redis.group_state_key.format(groupid)))
+        valids = [State.GROUP_CHECK, State.IN_QUEUE, State.PARTY_CHECK]
+        if state not in valids:
+            raise WrongGroupState(state, valids)
+        if state == State.IN_QUEUE:
+            self.leave_queue(groupid)
+        
+        await self.redis.set(Redis.user_ready_key.format(userid), b"0")
+
     async def is_ready(self, userid):
         return (await self.redis.get(Redis.user_ready_key.format(userid))) == b"1"
-
-    async def clear_ready(self, userid):
-        user_groupid_key = Redis.user_groupid_key.format(userid)
-        groupid = await self.redis.get(user_groupid_key)
-        if groupid is None:
-            raise PlayerNotInGroup()
-        groupid = groupid.decode()
-        
-        await self.redis.delete(Redis.user_ready_key.format(userid))
-
-
-    async def set_ready(self, userid, callback_when_all_ready):
-        user_groupid_key = Redis.user_groupid_key.format(userid)
-        groupid = await self.redis.get(user_groupid_key)
-        if groupid is None:
-            raise PlayerNotInGroup()
-        groupid = groupid.decode()
-        
-        await self.redis.set(Redis.user_ready_key.format(userid), 1)
     
     async def is_group_ready(self, groupid):
         group_members_key = Redis.group_members_key.format(groupid)
@@ -367,12 +412,13 @@ class Redis(KeyValueStore):
 
 
     async def join_queue(self, groupid):
-        gameid = int(await self.redis.get(Redis.group_gameid_key.format(groupid)))
-        if (await self.redis.get(Redis.group_partyid_key.format(groupid))) is not None:
-            raise GroupPlayingAlready()
-        if (await self.redis.get(Redis.group_slotid_key.format(groupid))) is not None:
-            raise GroupInQueueAlready()
+        group_state_key = Redis.group_state_key.format(groupid)
+        state = State(await self.redis.get(group_state_key))
+        if state != State.GROUP_CHECK:
+            raise WrongGroupState(state, State.GROUP_CHECK)
+        await self.redis.set(group_state_key, State.IN_QUEUE.value)
 
+        gameid = int(await self.redis.get(Redis.group_gameid_key.format(groupid)))
         game = await RDB.get_game_by_id(gameid)
         group_members_key = Redis.group_members_key.format(groupid)
         group_members = await self.redis.smembers(group_members_key)
@@ -442,7 +488,7 @@ class InMemory(KeyValueStore):
             raise PlayerInGroupAlready()
 
         groupid = uuid4()
-        self.users[userid] = UserKVS(groupid, False)
+        self.users[userid] = UserKVS(groupid, None, False)
         self.groups[groupid] = Group(
             State.GROUP_CHECK, [userid], gameid, None, None)
         return groupid
@@ -462,7 +508,7 @@ class InMemory(KeyValueStore):
         if len(group.members) + 1 > game.capacity:
             raise GroupIsFull()
 
-        self.users[userid] = UserKVS(groupid, False)
+        self.users[userid] = UserKVS(groupid, None, False)
         self.groups[groupid].members.append(userid)
 
     @fake_async
