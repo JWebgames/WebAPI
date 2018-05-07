@@ -1,8 +1,9 @@
 from logging import getLogger
 from sanic import Blueprint
 from sanic.response import json
-from ..middlewares import authenticate, require_fields, ClientType
+from ..middlewares import authenticate, require_fields
 from ..storage import drivers 
+from ..storage.models import ClientType
 
 bp = Blueprint("groups")
 logger = getLogger(__name__)

@@ -9,8 +9,9 @@ from sanic import Blueprint
 from sanic.exceptions import Forbidden, NotFound
 from sanic.response import json
 from .. import config
-from ..middlewares import authenticate, require_fields, ClientType
-from ..storage import drivers 
+from ..middlewares import authenticate, require_fields
+from ..storage import drivers
+from ..storage.models import ClientType
 
 bp = Blueprint("auth")
 logger = getLogger(__name__)

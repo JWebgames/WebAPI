@@ -1,7 +1,6 @@
 """Helper modules, each function is callable before/after sanic
 request/response in order to parse/validate/modify/... them"""
 
-from enum import Enum
 from functools import wraps
 from ipaddress import ip_address
 from logging import getLogger
@@ -17,17 +16,9 @@ from .storage import drivers
 from . import config
 from .server import app
 from .exceptions import WebAPIError
+from .storage.models import ClientType
 
 logger = getLogger(__name__)
-
-
-class ClientType(Enum):
-    """Enum of JWT user type"""
-    ADMIN = "admin"
-    PLAYER = "player"
-    GAME = "game"
-    WEBAPI = "webapi"
-    MANAGER = "manager"
 
 @app.middleware("request")
 def set_real_ip(req):

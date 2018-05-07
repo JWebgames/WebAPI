@@ -3,8 +3,9 @@ from operator import methodcaller
 from sanic import Blueprint
 from sanic.response import json
 from sanic.exceptions import NotFound
-from ..middlewares import authenticate, require_fields, ClientType
+from ..middlewares import authenticate, require_fields
 from ..storage import drivers 
+from ..storage.models import ClientType
 
 bp = Blueprint("games")
 logger = getLogger(__name__)
