@@ -1,0 +1,13 @@
+users:<userid>:groupid => gropuid
+users:<userid>:partyid => userid
+users:<userid>:ready => bool
+
+groups:<groupid>:gameid => gameid
+groups:<groupid>:slotit => slotit
+groups:<groupid>:state => models.State
+groups:<groupid>:members => List[userid]
+
+queues:<gameid> => List[slotit]
+
+slots:<slotid>:members => List[userid]
+slots:<slotid>:groups => List[groupid]
