@@ -2,6 +2,23 @@
 
 from typing import NamedTuple, List, Optional
 from uuid import UUID
+from enum import Enum
+
+class ClientType(Enum):
+    """Enum of JWT user type"""
+    ADMIN = "admin"
+    PLAYER = "player"
+    GAME = "game"
+    WEBAPI = "webapi"
+    MANAGER = "manager"
+
+
+class State(Enum):
+    """Enum of player states"""
+    GROUP_CHECK = b"group-check"
+    IN_QUEUE = b"in-queue"
+    PARTY_CHECK = b"party-check"
+    PLAYING = b"playing"
 
 
 class User(NamedTuple):
@@ -23,6 +40,7 @@ class LightGame(NamedTuple):
     gameid: int
     name: str
 
+
 class Game(NamedTuple):
     gameid: int
     name: str
@@ -30,13 +48,15 @@ class Game(NamedTuple):
     capacity: int
 
 
-class Group():
+class Group:
+    state: State
     members: List[UUID]
     gameid: Optional[UUID]
     slotid: Optional[UUID]
     partyid: Optional[UUID]
 
-    def __init__(self, members, gameid, slotid, partyid):
+    def __init__(self, state, members, gameid, slotid, partyid):
+        self.state = state
         self.members = members
         self.gameid = gameid
         self.slotid = slotid
@@ -44,17 +64,19 @@ class Group():
 
     def asdict():
         return {
+            "state": self.state.value,
             "members": list(map(str, self.members)),
             "gameid": str(self.gameid),
             "slotid": str(self.slotid),
             "partyid": str(self.partyid)
         }
 
+
 class UserKVS:
     groupid: Optional[UUID]
-    is_ready: bool
+    ready: bool
 
-    def __ini__(self, groupid, ready):
+    def __init__(self, groupid, ready):
         self.groupid = groupid
         self.ready = ready
     
@@ -62,4 +84,29 @@ class UserKVS:
         return {
             "groupid": str(self.groupid),
             "ready": self.ready
+        }
+
+class Slot:
+    players: List[UUID]
+    groups: List[UUID]
+
+    def __init__(self, players, groups):
+        self.players = players
+        self.groups = groups
+    
+    def asdict():
+        return {
+            "members": list(map(str, self.members)),
+            "groups": list(map(str, self.groups))
+        }
+
+class Party:
+    slotid: UUID
+
+    def __init__(self, slotid):
+        self.slotid = slotid
+    
+    def asdict():
+        return {
+            "slotid": str(self.slotid)
         }

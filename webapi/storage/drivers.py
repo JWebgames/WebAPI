@@ -11,14 +11,14 @@ from time import time
 from asyncpg import Record
 from sqlite3 import connect as sqlite3_connect
 from aioredis import Redis as RedisHighInterface
-from .models import User, Game, Group, LightGame
+from .models import User, Game, Group, LightGame, State, UserKVS, Slot
 from ..tools import root, fake_async
 from webapi.exceptions import PlayerInGroupAlready, \
                               PlayerNotInGroup, \
                               GroupDoesntExist, \
-                              GroupInQueueAlready, \
                               GroupIsFull, \
-                              GroupPlayingAlready
+                              GroupNotReady, \
+                              WrongGroupState
 from uuid import UUID, uuid4
 from time import time
 from typing import NewType
@@ -200,24 +200,46 @@ class KeyValueStore():
         raise NotImplementedError()
 
     async def create_group(self, userid, gameid):
+        """Create a new group for a game"""
         raise NotImplementedError()
 
     async def join_group(self, groupid, userid):
+        """Join an existing group"""
+        raise NotImplementedError()
+    
+    async def mark_as_ready(self, userid):
+        """Mark self as ready"""
+        raise NotImplementedError()
+    
+    async def mark_as_not_ready(self, userid):
+        """Mark self as not ready (group-check/party-check)"""
         raise NotImplementedError()
 
     async def leave_group(self, userid):
+        """Leave the current group"""
         raise NotImplementedError()
 
     async def join_queue(self, groupid):
+        """Place the group in the queue, try to create a match"""
         raise NotImplementedError()
 
     async def leave_queue(self, groupid):
+        """Remove the group from the queue"""
         raise NotImplementedError()
     
-    async def msgqueue_push(self, userid, msg, msgid, timestamp):
+    async def create_party(self, groupid):
         raise NotImplementedError()
     
-    async def create_party(self, gameid, slotid):
+    async def send_msg_to_user(self, userid, msg, msgid, timestamp):
+        """Push a message to the user's personnal message queue"""
+        raise NotImplementedError()
+
+    async def send_msg_to_group(self, groupid, msg, msgid, timestamp):
+        """Push a message to the group's message queue"""
+        raise NotImplementedError()
+
+    async def send_msg_to_party(self, partyid, msg, msgid, timestamp):
+        """Push a message to the party's message queue"""
         raise NotImplementedError()
 
 
@@ -331,7 +353,7 @@ class Redis(KeyValueStore):
         
         await self.redis.set(Redis.user_ready_key.format(userid), 1)
     
-    async def is_group_ready(self, groupid)
+    async def is_group_ready(self, groupid):
         group_members_key = Redis.group_members_key.format(groupid)
         members = list(map(methodcaller("decode"),
                            await self.redis.smembers(group_members_key)))
@@ -398,12 +420,12 @@ class Redis(KeyValueStore):
 class InMemory(KeyValueStore):
     """Implementation database-free"""
     def __init__(self):
-        self.token_revocation_list = []  # List[tokenid: UUID]
-        self.groups = {}  # Dict[groupid: UUID, Group]
-        self.queues = {}  # Dict[gameid, OrderedDict[UUID, List[userid]]]
-        self.slots = {}  # Dict[slotid, List[userid]]
-        self.parties = {}  # Dict[partyid, List[userid]]
-        self.user_map = {}
+        self.token_revocation_list = []  # List[tokenid]]
+        self.users = {}  # Dict[userid, UserKVS]
+        self.groups = {}  # Dict[groupid, Group]
+        self.queues = {}  # Dict[gameid, List[slotid]]
+        self.slots = {}  # Dict[slotid, Slot]
+        self.parties = {}  # Dict[partyid, Party
 
     @fake_async
     def revoke_token(self, token):
@@ -415,99 +437,146 @@ class InMemory(KeyValueStore):
 
     @fake_async
     def create_group(self, userid, gameid):
-        for group in self.groups.values():
-            if userid in group.members:
-                raise PlayerInGroupAlready()
+        user = self.users.get(userid)
+        if user is not None and user.groupid is not None:
+            raise PlayerInGroupAlready()
 
         groupid = uuid4()
-        self.user_map[userid] = groupid
-        self.groups[groupid] = Group([userid], gameid, None, None)
+        self.users[userid] = UserKVS(groupid, False)
+        self.groups[groupid] = Group(
+            State.GROUP_CHECK, [userid], gameid, None, None)
         return groupid
 
     async def join_group(self, groupid, userid):
+        user = self.users.get(userid)
+        if user is not None and user.groupid is not None:
+            raise PlayerInGroupAlready()
+
         group = self.groups.get(groupid)
         if group is None:
             raise GroupDoesntExist()
-        if group.partyid is not None:
-            raise GroupPlayingAlready()
-        if group.slotid is not None:
-            raise GroupInQueueAlready()
-        for group in self.groups.values():
-            if userid in group.members:
-                raise PlayerInGroupAlready()
+        if group.state != State.GROUP_CHECK:
+            raise WrongGroupState(group.state, State.GROUP_CHECK)
 
         game = await RDB.get_game_by_id(group.gameid)
         if len(group.members) + 1 > game.capacity:
             raise GroupIsFull()
 
-        self.user_map[userid] = groupid
+        self.users[userid] = UserKVS(groupid, False)
         self.groups[groupid].members.append(userid)
 
     @fake_async
-    def leave_group(self, userid):
-        groupid = self.user_map.get(userid)
-        if groupid is None:
+    def mark_as_ready(self, userid):
+        user = self.users.get(userid)
+        if user is None or user.groupid is None:
             raise PlayerNotInGroup()
         
-        group = self.groups[groupid]
-        if group.slotid is not None:
-            self.leave_queue(self, groupid, group.slotid)
-        del self.user_map[userid]
+        state = self.groups[user.groupid].state
+        valids = [State.GROUP_CHECK, State.PARTY_CHECK]
+        if state not in valids:
+            raise WrongGroupState(state, valids)
+        
+        user.ready = True
+    
+    async def mark_as_not_ready(self, userid):
+        user = self.users.get(userid)
+        if user is None or user.groupid is None:
+            raise PlayerNotInGroup()
+
+        state = self.groups[user.groupid].state
+        valids = [State.GROUP_CHECK, State.IN_QUEUE, State.PARTY_CHECK]
+        if state not in valids:
+            raise WrongGroupState(state, valids)
+
+        user.ready = False
+        if self.groups[user.groupid].state == State.IN_QUEUE:
+            await self.leave_queue(user.groupid)
+            
+
+    @fake_async
+    def leave_group(self, userid):
+        user = self.users.get(userid)
+        if user is None or user.groupid is None:
+            raise PlayerNotInGroup()
+        
+        group = self.groups[user.groupid]
+        if group.state == State.IN_QUEUE:
+            self.leave_queue(self, None, group)
+        del self.users[userid]
         group.members.remove(userid)
         if not group.members:
             del self.groups[groupid]
     
     @fake_async
-    def get_group(self, userid):
-        groupid = self.user_map.get(userid)
-        if groupid is None:
+    def get_user(self, userid):
+        user = self.users.get(userid)
+        if user is None:
             raise PlayerNotInGroup()
+        return user
+
+
+    @fake_async
+    def get_group(self, groupid):
+        group = self.groups.get(groupid)
+        if group is None:
+            raise GroupDoesntExist()
         return self.groups[groupid]
+
 
     async def join_queue(self, groupid):
         group = self.groups.get(groupid)
         if group is None:
             raise GroupDoesntExist()
+        if group.state != State.GROUP_CHECK:
+            raise WrongGroupState(group.state, State.GROUP_CHECK)
+        group.state = State.IN_QUEUE
+        
+        for userid in group.members:
+            if not self.users[userid].ready:
+                raise GroupNotReady()
 
         game = await RDB.get_game_by_id(group.gameid)
 
         game_queue = self.queues.get(game.gameid)
         if game_queue is None:
-            game_queue = self.queues[game.gameid] = OrderedDict()
+            game_queue = self.queues[game.gameid] = []
 
-        for slotid, slot in game_queue.items():
-            size = len(slot) + len(group.members)
-            if size < game.capacity:
-                slot.extend(group.members)
+        for slotid in game_queue:
+            slot = self.slots[slotid]
+            size = len(slot.players) + len(group.members)
+            if size <= game.capacity:
+                slot.players.extend(group.members)
+                slot.groups.append(groupid)
                 group.slotid = slotid
-                return
-            elif size == game.capacity:
-                slot.extend(group.members)
-                group.slotid = slotid
-                partyid = uuid4()
-                self.parties[partyid] = slot
-                ensure_future(start_gate, partyid)
-
-        slotid = uuid4()
-        group.slotid = slotid
-        self.slots[slotid] = group.members.copy()
-        self.queues[game.gameid][slotid] = self.slots[slotid]
-        if len(self.slots[slotid]) == game.capacity:
-            partyid = uuid4()
-            ensure_future(start_game, partyid)
+                if size == game.capacity:
+                    ensure_future(self.start_game(slotid))
+                break
+        else:
+            slotid = uuid4()
+            group.slotid = slotid
+            slot = self.slots[slotid] = Slot(group.members.copy(), [groupid])
+            self.queues[game.gameid].append(slotid)
+            if len(slot.players) == game.capacity:
+                ensure_future(self.start_game(slotid))
 
     @fake_async
-    def leave_queue(self, groupid, queueid):
-        group = self.groups.get(groupid)
+    def leave_queue(self, groupid, group=None):
         if group is None:
-            raise GroupDoesntExist()
+            group = self.groups.get(groupid)
+            if group is None:
+                raise GroupDoesntExist()
+            if group.state != State.IN_QUEUE:
+                raise GroupNotInQueue()
 
-        queue = self.queues.get(queueid)
-        if queue is None:
-            raise QueueDoesntExist()
-
+        slot = self.slots[group.slotid]
+        slot.groups.remove(groupid)
         for member in group.members:
-            queue.remove(member)
+            slot.players.remove(member)
+        if not slot.groups:
+            del self.slots[group.slotid]
+            self.queues[group.gameid].remove(group.slotid)
+        group.slotid = None
+        group.state = State.GROUP_CHECK
 
     @fake_async
     def msgqueue_push(self, userid, msg, msgid=None, timestamp=None):
