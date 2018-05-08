@@ -401,6 +401,11 @@ class Redis(KeyValueStore):
 
 
     async def join_queue(self, groupid):
+        gameid = await self.redis.get(Redis.group_gameid_key.format(groupid))
+        if gameid is None:
+            raise GroupDoesntExist()
+        gameid = int(gameid)
+
         group_state_key = Redis.group_state_key.format(groupid)
         state = State(await self.redis.get(group_state_key))
         if state != State.GROUP_CHECK:
@@ -410,7 +415,6 @@ class Redis(KeyValueStore):
         if not (await self.is_group_ready(groupid)):
             raise GroupNotReady()
 
-        gameid = int(await self.redis.get(Redis.group_gameid_key.format(groupid)))
         game = await RDB.get_game_by_id(gameid)
         group_members_key = Redis.group_members_key.format(groupid)
         group_members = await self.redis.smembers(group_members_key)
@@ -439,14 +443,32 @@ class Redis(KeyValueStore):
             await self.redis.sunionstore(
                 Redis.slot_players_key.format(slotid), group_members_key)
             await self.redis.sadd(Redis.slot_groups_key.format(slotid), str(groupid))
-            if len(group_members) < game.capacity:
-                await self.redis.rpush(
-                    Redis.game_queue_key.format(gameid), str(slotid))
-            else:
+            await self.redis.rpush(
+                Redis.game_queue_key.format(gameid), str(slotid))
+            if len(group_members) == game.capacity:
                 ensure_future(self.start_game(UUID(slotid)))
 
     async def leave_queue(self, groupid):
-        raise NotImplementedError()
+        gameid = await self.redis.get(Redis.group_gameid_key.format(groupid))
+        if gameid is None:
+            raise GroupDoesntExist()
+        gameid = int(gameid)
+        
+        group_state_key = Redis.group_state_key.format(groupid)
+        state = State(await self.redis.get(group_state_key))
+        if state != State.IN_QUEUE:
+            raise WrongGroupState(state, State.IN_QUEUE)
+
+        group_slotid_key = Redis.group_slotid_key.format(groupid)
+        slotid = (await self.redis.get(group_slotid_key)).decode()
+        slot_players_key = Redis.slot_players_key.format(slotid)
+        await self.redis.srem(Redis.slot_groups_key.format(slotid), str(groupid))
+        await self.redis.sdiffstore(
+            slot_players_key, slot_players_key, Redis.group_members_key.format(groupid))
+        if (await self.redis.scard(slot_players_key)) == 0:
+            self.redis.lrem(Redis.game_queue_key.format(gameid), 1, slotid)
+        await self.redis.set(group_state_key, State.GROUP_CHECK.value)
+
 
 class InMemory(KeyValueStore):
     """Implementation database-free"""
