@@ -52,6 +52,9 @@ class PlayerInGroupAlready(GroupError):
 class PlayerNotInGroup(GroupError):
     pass
 
+class PlayerNotInParty(GroupError):
+    pass
+
 class GroupIsFull(GroupError):
     pass
 

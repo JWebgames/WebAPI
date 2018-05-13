@@ -1,7 +1,8 @@
 """Interfaces and implementation of databases drivers"""
 
 from asyncio import ensure_future, gather
-from collections import OrderedDict, Iterable
+from collections import OrderedDict, Iterable, defaultdict
+from datetime import datetime, timedelta
 from logging import getLogger
 from operator import methodcaller
 from os import listdir
@@ -11,7 +12,9 @@ from time import time
 from asyncpg import Record
 from sqlite3 import connect as sqlite3_connect
 from aioredis import Redis as RedisHighInterface
-from .models import User, Game, Group, LightGame, State, UserKVS, Slot
+from .models import User, Game, LightGame, \
+                    Group, UserKVS, Slot, Message, \
+                    State, MsgQueueType
 from ..tools import root, fake_async
 from webapi.exceptions import PlayerInGroupAlready, \
                               PlayerNotInGroup, \
@@ -199,6 +202,10 @@ class KeyValueStore():
     async def is_token_revoked(self, token_id) -> bool:
         """Validate a non-expirated token"""
         raise NotImplementedError()
+    
+    async def get_user(self, userid):
+        """Get a user given it's id"""
+        raise NotImplementedError()
 
     async def create_group(self, userid, gameid):
         """Create a new group for a game"""
@@ -206,6 +213,14 @@ class KeyValueStore():
 
     async def join_group(self, groupid, userid):
         """Join an existing group"""
+        raise NotImplementedError()
+    
+    async def get_group(self, groupid):
+        """Get a group given its id"""
+        raise NotImplementedError()
+    
+    async def get_group_of_user(self, userid):
+        """Get the group of the user"""
         raise NotImplementedError()
     
     async def mark_as_ready(self, userid):
@@ -231,16 +246,11 @@ class KeyValueStore():
     async def create_party(self, groupid):
         raise NotImplementedError()
     
-    async def send_msg_to_user(self, userid, msg, msgid, timestamp):
-        """Push a message to the user's personnal message queue"""
+    async def send_message(self, queue, id_, message, 
+                           msgid=None, timestamp=None):
         raise NotImplementedError()
-
-    async def send_msg_to_group(self, groupid, msg, msgid, timestamp):
-        """Push a message to the group's message queue"""
-        raise NotImplementedError()
-
-    async def send_msg_to_party(self, partyid, msg, msgid, timestamp):
-        """Push a message to the party's message queue"""
+    
+    async def recv_messages(self, queue, id_, since):
         raise NotImplementedError()
 
 
@@ -478,7 +488,12 @@ class InMemory(KeyValueStore):
         self.groups = {}  # Dict[groupid, Group]
         self.queues = {}  # Dict[gameid, List[slotid]]
         self.slots = {}  # Dict[slotid, Slot]
-        self.parties = {}  # Dict[partyid, Party
+        self.parties = {}  # Dict[partyid, Party]
+        self.msgqueue = {
+            MsgQueueType.USER: defaultdict(list),
+            MsgQueueType.GROUP: defaultdict(list),
+            MsgQueueType.PARTY: defaultdict(list),
+        }
 
     @fake_async
     def revoke_token(self, token):
@@ -499,6 +514,13 @@ class InMemory(KeyValueStore):
         self.groups[groupid] = Group(
             State.GROUP_CHECK, [userid], gameid, None, None)
         return groupid
+    
+    @fake_async
+    def get_user(self, userid):
+        user = self.users.get(userid)
+        if user is None:
+            raise PlayerInGroupAlready
+        return user
 
     async def join_group(self, groupid, userid):
         user = self.users.get(userid)
@@ -517,6 +539,20 @@ class InMemory(KeyValueStore):
 
         self.users[userid] = UserKVS(groupid, None, False)
         self.groups[groupid].members.append(userid)
+    
+    @fake_async
+    def get_group(self, groupid):
+        group = self.groups.get(groupid)
+        if group is None:
+            raise GroupDoesntExist()
+        return group
+    
+    @fake_async
+    def get_group_of_user(self, userid):
+        user = self.users.get(userid)
+        if user is None:
+            raise PlayerNotInGroup()
+        return self.groups[user.groupid]
 
     @fake_async
     def mark_as_ready(self, userid):
@@ -632,8 +668,19 @@ class InMemory(KeyValueStore):
         group.state = State.GROUP_CHECK
 
     @fake_async
-    def msgqueue_push(self, userid, msg, msgid=None, timestamp=None):
+    def send_message(self, queue, id_, message, msgid=None, timestamp=None):
         if msgid is None:
             msgid = uuid4()
         if timestamp is None:
             timestamp = time()
+
+        self.msgqueues[queue][id_].append(
+            Message(msgid=msgid, timestamp=timestamp, message=message))
+    
+    @fake_async
+    def recv_messages(self, queue, id_, since=None):
+        if since is None:
+            since=datetime.utcnow() - timedelta(seconds=5)
+        
+        return list(filter(lambda msg: msg.timestamp >= since, 
+                           self.msgqueue[queue].get(id_, [])))

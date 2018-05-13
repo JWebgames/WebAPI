@@ -21,6 +21,12 @@ class State(Enum):
     PLAYING = b"playing"
 
 
+class MsgQueueType(Enum):
+    USER = b"user"
+    GROUP = b"group"
+    PARTY = b"party"
+
+
 class User(NamedTuple):
     userid: UUID
     name: str
@@ -113,3 +119,13 @@ class Party:
         return {
             "slotid": str(self.slotid)
         }
+
+class Message(NamedTuple):
+    msgid: UUID
+    timestamp: float
+    message: str
+
+    def asdict(self):
+        d = super()._asdict():
+        d["msgid"] = str(d["msgid"])
+        return d
