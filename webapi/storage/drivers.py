@@ -11,7 +11,6 @@ from pathlib import Path
 from time import time
 from asyncpg import Record
 from sqlite3 import connect as sqlite3_connect
-from aioredis import Redis as RedisHighInterface
 from .models import User, Game, LightGame, \
                     Group, UserKVS, Slot, Message, \
                     State, MsgQueueType
@@ -246,11 +245,7 @@ class KeyValueStore():
     async def create_party(self, groupid):
         raise NotImplementedError()
     
-    async def send_message(self, queue, id_, message, 
-                           msgid=None, timestamp=None):
-        raise NotImplementedError()
-    
-    async def recv_messages(self, queue, id_, since):
+    async def send_message(self, queue, id_, payload):
         raise NotImplementedError()
 
 
@@ -268,9 +263,10 @@ class Redis(KeyValueStore):
     game_queue_key = "queues:{!s}"
     slot_players_key = "slots:{!s}:players"
     slot_groups_key = "slots:{!s}:groups"
+    msgqueue_key = "msgqueues:{!s}:{!s}"
 
     def __init__(self, redis_pool):
-        self.redis = RedisHighInterface(redis_pool)
+        self.redis = redis_pool
 
     async def revoke_token(self, token) -> None:
         await self.redis.zremrangebyscore("trl", 0, int(time()))
@@ -478,6 +474,11 @@ class Redis(KeyValueStore):
         if (await self.redis.scard(slot_players_key)) == 0:
             self.redis.lrem(Redis.game_queue_key.format(gameid), 1, slotid)
         await self.redis.set(group_state_key, State.GROUP_CHECK.value)
+    
+    async def send_message(self, queue, id_, payload):
+        queue = Redis.msgqueue_key.format(queue, id_)
+        await self.redis.publish(queue, json.dumps(payload).encode("utf-8"))
+
 
 
 class InMemory(KeyValueStore):
