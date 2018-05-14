@@ -7,7 +7,7 @@ import scrypt
 from pytimeparse import parse as timeparse
 from sanic import Blueprint
 from sanic.exceptions import Forbidden, NotFound
-from sanic.response import json
+from sanic.response import json, text
 from .. import config
 from ..middlewares import authenticate, require_fields
 from ..storage import drivers
@@ -26,7 +26,7 @@ async def register(req, username, email, password):
     logger.info("Account created: %s", userid)
     return json({"userid": str(userid)})
 
-@bp.route("/login", methods=["POST"])
+@bp.route("/", methods=["POST"])
 @require_fields({"login", "password"})
 async def login(req, login, password):
     user = await drivers.RDB.get_user_by_login(login)
@@ -55,9 +55,9 @@ async def login(req, login, password):
     return json({"token": jwt})
 
 
-@bp.route("/logout", methods=["GET"])
+@bp.route("/", methods=["DELETE"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
 async def logout(req, jwt):
     await drivers.KVS.revoke_token(jwt)
     logger.info("User disconnected: %s", jwt["jti"])
-    return json({})
+    return text("", status=204)
