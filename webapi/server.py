@@ -15,6 +15,7 @@ from .storage import drivers
 from .routes.auth import bp as authbp
 from .routes.games import bp as gamesbp
 from .routes.groups import bp as groupsbp
+from .routes.msgqueues import bp as msgqueuesbp
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ async def connect_to_redis(_app, loop):
             loop=loop
         )
     else:
-        redispool = await aioredis.create_pool(
+        redispool = await aioredis.create_redis_pool(
             address=(config.redis.HOST, config.redis.PORT),
             db=config.redis.DATABASE,
             password=config.redis.PASSWORD,
@@ -96,3 +97,4 @@ async def server_status(_req):
 app.blueprint(authbp, url_prefix="/v1/auth")
 app.blueprint(gamesbp, url_prefix="/v1/games")
 app.blueprint(groupsbp, url_prefix="/v1/groups")
+app.blueprint(msgqueuesbp, url_prefix="/v1/msgqueues")
