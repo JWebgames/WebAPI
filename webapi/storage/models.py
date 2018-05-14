@@ -22,9 +22,9 @@ class State(Enum):
 
 
 class MsgQueueType(Enum):
-    USER = b"user"
-    GROUP = b"group"
-    PARTY = b"party"
+    USER = "user"
+    GROUP = "group"
+    PARTY = "party"
 
 
 class User(NamedTuple):
@@ -126,6 +126,6 @@ class Message(NamedTuple):
     message: str
 
     def asdict(self):
-        d = super()._asdict():
+        d = super()._asdict()
         d["msgid"] = str(d["msgid"])
         return d
