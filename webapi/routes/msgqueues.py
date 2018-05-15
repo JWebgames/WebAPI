@@ -14,7 +14,8 @@ logger = getLogger(__name__)
 async def feeder(res, queue):
     chan = await drivers.KVS.redis.subscribe(queue)
     while await chan.wait_message():
-        res.write(chan.get(encoding="utf-8") + chr(30))
+        event = await chan.get(encoding="utf-8")
+        res.write(event + chr(30))  # ascii unit separator
 
 @bp.route("/user", methods=["GET"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
@@ -22,6 +23,8 @@ async def get_user_msg(req, jwt):
     queue = drivers.Redis.msgqueue_key.format(MsgQueueType.USER, jwt["uid"])
     async def recv(res):
         await feeder(res, queue)
+    
+    await drivers.KVS.send_message(MsgQueueType.USER, jwt["uid"], {"type": "server:notice", "notice": "hello"})
     return stream(recv)
     
 

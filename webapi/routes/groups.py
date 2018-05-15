@@ -40,9 +40,7 @@ async def invite(req, userid, jwt):
                    "gameid": str(game.gameid),
                    "gamename": game.name
                }}
-    await drivers.KVS.send_message(
-        MsgQueueType.USER, userid, json_loads(payload))
-
+    await drivers.KVS.send_message(MsgQueueType.USER, userid, payload)
     return text("", status=204)
 
 
@@ -57,9 +55,7 @@ async def join(req, groupid, jwt):
                    "userid": jwt["uid"],
                    "username": jwt.get("nic")
                }}
-    await drivers.KVS.send_message(
-        MsgQueueType.GROUP, user.groupid, json_loads(payload))
-
+    await drivers.KVS.send_message(MsgQueueType.GROUP, user.groupid, payload)
     return text("", status=204)
 
 
@@ -74,9 +70,7 @@ async def leave(req, jwt):
                    "userid": jwt["uid"],
                    "username": jwt.get("nic")
                }}
-    await drivers.KVS.send_message(
-        MsgQueueType.GROUP, user.groupid, json_loads(payload))
-
+    await drivers.KVS.send_message(MsgQueueType.GROUP, user.groupid, payload)
     return text("", status=204)
 
 
@@ -91,9 +85,7 @@ async def ready(req, jwt):
                    "userid": jwt["uid"],
                    "username": jwt.get("nic")
                }}
-    await drivers.KVS.send_message(
-        MsgQueueType.GROUP, user.groupid, json_loads(payload))
-
+    await drivers.KVS.send_message(MsgQueueType.GROUP, user.groupid, payload)
     return text("", status=204)
 
 
@@ -108,9 +100,7 @@ async def notready(req, jwt):
                    "userid": jwt["uid"],
                    "username": jwt.get("nic")
                }}
-    await drivers.KVS.send_message(
-        MsgQueueType.GROUP, user.groupid, json_loads(payload))
-
+    await drivers.KVS.send_message(MsgQueueType.GROUP, user.groupid, payload)
     return text("", status=204)
 
 
@@ -121,7 +111,5 @@ async def start(req, jwt):
     await drivers.KVS.join_queue(user.groupid)
 
     payload = {"type":"group:queue joined"}
-    await drivers.KVS.send_message(
-        MsgQueueType.GROUP, user.groupid, json_loads(payload))
-
+    await drivers.KVS.send_message(MsgQueueType.GROUP, user.groupid, payload)
     return text("", status=204)
