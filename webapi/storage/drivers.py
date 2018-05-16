@@ -3,12 +3,14 @@
 from asyncio import ensure_future, gather
 from collections import OrderedDict, Iterable, defaultdict
 from datetime import datetime, timedelta
+from json import dumps as json_dumps
 from logging import getLogger
 from operator import methodcaller
 from os import listdir
 from os.path import join as pathjoin
 from pathlib import Path
 from time import time
+from aioredis import Redis as AIORedis
 from asyncpg import Record
 from sqlite3 import connect as sqlite3_connect
 from .models import User, Game, LightGame, \
@@ -266,7 +268,7 @@ class Redis(KeyValueStore):
     msgqueue_key = "msgqueues:{!s}:{!s}"
 
     def __init__(self, redis_pool):
-        self.redis = redis_pool
+        self.redis = AIORedis(redis_pool)
 
     async def revoke_token(self, token) -> None:
         await self.redis.zremrangebyscore("trl", 0, int(time()))
@@ -477,7 +479,7 @@ class Redis(KeyValueStore):
     
     async def send_message(self, queue, id_, payload):
         queue = Redis.msgqueue_key.format(queue, id_)
-        await self.redis.publish(queue, json.dumps(payload).encode("utf-8"))
+        await self.redis.publish(queue, json_dumps(payload).encode("utf-8"))
 
 
 

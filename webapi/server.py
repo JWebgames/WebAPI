@@ -46,7 +46,7 @@ async def connect_to_redis(_app, loop):
             loop=loop
         )
     else:
-        redispool = await aioredis.create_redis_pool(
+        redispool = await aioredis.create_pool(
             address=(config.redis.HOST, config.redis.PORT),
             db=config.redis.DATABASE,
             password=config.redis.PASSWORD,
