@@ -31,7 +31,7 @@ def wizard():
             mail = input("Email: ")
             pwd = getpass("Password: ")
             hpwd = scrypt_encrypt(token_bytes(64), pwd, maxtime=0.1)
-            print("Hashed password: {}...".format(hpwd[:25].decode()))
+            print("Hashed password: {}...".format(hpwd[:25]))
             if ask_bool("Process with user creation ?"):
                 coro = drivers.RDB.create_user(userid, name, mail, hpwd)
                 loop.run_until_complete(coro)

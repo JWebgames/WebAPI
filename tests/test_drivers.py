@@ -1,7 +1,8 @@
-from asyncio import get_event_loop, gather
+from asyncio import get_event_loop, gather, coroutine, sleep
 from uuid import uuid4, UUID
 from logging import getLogger
 from unittest import TestCase
+from asynctest import CoroutineMock
 
 from webapi.config import webapi
 from webapi.server import connect_to_postgres, disconnect_from_postgres, \
@@ -11,8 +12,10 @@ from webapi.tools import lruc
 from webapi.exceptions import PlayerInGroupAlready, \
                               PlayerNotInGroup, \
                               GroupDoesntExist, \
-                              GroupInQueueAlready, \
-                              GroupIsFull
+                              WrongGroupState, \
+                              GroupIsFull, \
+                              GroupNotReady
+from webapi.storage.models import State
 
 
 loop = get_event_loop()
@@ -102,6 +105,9 @@ class TestKVS(TestCase):
 
     def test_start_game(self):
         """Make a match out of several groups of players"""
+
+        drivers.KVS.start_game = CoroutineMock()
+
         player_1 = uuid4()
         player_2 = uuid4()
         player_3 = uuid4()
@@ -110,25 +116,32 @@ class TestKVS(TestCase):
         player_6 = uuid4()
 
         group_1 = lruc(drivers.KVS.create_group(player_1, self.game.gameid))
+        lruc(drivers.KVS.mark_as_ready(player_1))
         lruc(drivers.KVS.join_group(group_1, player_2))
+        lruc(drivers.KVS.mark_as_ready(player_2))
         lruc(drivers.KVS.join_group(group_1, player_3))
+        lruc(drivers.KVS.mark_as_ready(player_3))
 
         group_2 = lruc(drivers.KVS.create_group(player_4, self.game.gameid))
+        lruc(drivers.KVS.mark_as_ready(player_4))
         lruc(drivers.KVS.join_group(group_2, player_5))
+        lruc(drivers.KVS.mark_as_ready(player_5))
 
         group_3 = lruc(drivers.KVS.create_group(player_6, self.game.gameid))
+        lruc(drivers.KVS.mark_as_ready(player_6))
 
         # 3 players join, need 4 to start
         queue_filled = lruc(drivers.KVS.join_queue(group_1))
-        self.assertTrue(queue_filled is None)
 
         # 2 more players join, need 4 (3 & 2 don't fit 4)
         queue_filled = lruc(drivers.KVS.join_queue(group_2))
-        self.assertTrue(queue_filled is None)
 
         # 1 more player join (3 & 1 fit)
         queue_filled = lruc(drivers.KVS.join_queue(group_3))
-        self.assertTrue(isinstance(queue_filled, UUID))
+
+        group = lruc(drivers.KVS.get_group(group_3))
+        drivers.KVS.start_game.assert_called_once_with(group.slotid)
+        
 
     def test_create_group_while_alone(self):
         """Creating a group beeing alone must pass"""
@@ -159,18 +172,81 @@ class TestKVS(TestCase):
         self.assertRaises(PlayerNotInGroup, lruc, coro)
 
     def test_join_queued_group(self):
-        """Joining a group in queue should fail"""
+        """Joining a queued group should fail"""
         player_2 = uuid4()
         groupid = lruc(drivers.KVS.create_group(self.user.userid,
                                                 self.game.gameid))
+        lruc(drivers.KVS.mark_as_ready(self.user.userid))
         lruc(drivers.KVS.join_queue(groupid))
         coro = drivers.KVS.join_group(groupid, player_2)
-        self.assertRaises(GroupInQueueAlready, lruc, coro)
+        self.assertRaises(WrongGroupState, lruc, coro)
 
     def test_join_filled_group(self):
+        """Joining a filled group should fail"""
         groupid = lruc(drivers.KVS.create_group(self.user.userid,
                                                 self.game.gameid))
         for _ in range(3):
             lruc(drivers.KVS.join_group(groupid, uuid4()))
         coro = drivers.KVS.join_group(groupid, uuid4())
-        self.assertRaises(GroupIsFull, lruc, coro)    
+        self.assertRaises(GroupIsFull, lruc, coro)
+
+    def test_join_leave_queue(self):
+        """Join the queue and leave it a couple of time should pass"""
+        groupid = lruc(drivers.KVS.create_group(self.user.userid,
+                                                self.game.gameid))
+        lruc(drivers.KVS.mark_as_ready(self.user.userid))
+        group = lruc(drivers.KVS.get_group(groupid))
+        self.assertEqual(group.state, State.GROUP_CHECK)
+
+        # Join
+        lruc(drivers.KVS.join_queue(groupid))
+        group = lruc(drivers.KVS.get_group(groupid))
+        self.assertEqual(group.state, State.IN_QUEUE)
+
+        # Leave
+        lruc(drivers.KVS.leave_queue(groupid))
+        group = lruc(drivers.KVS.get_group(groupid))
+        self.assertEqual(group.state, State.GROUP_CHECK)
+
+        # Join
+        lruc(drivers.KVS.join_queue(groupid))
+        group = lruc(drivers.KVS.get_group(groupid))
+        self.assertEqual(group.state, State.IN_QUEUE)
+
+        # Leave
+        lruc(drivers.KVS.leave_queue(groupid))
+        group = lruc(drivers.KVS.get_group(groupid))
+        self.assertEqual(group.state, State.GROUP_CHECK)
+
+    def test_clear_ready_while_queued(self):
+        """Mark a player as not ready while in queue should leave the queue"""
+        groupid = lruc(drivers.KVS.create_group(self.user.userid,
+                                                self.game.gameid))
+        lruc(drivers.KVS.mark_as_ready(self.user.userid))
+        lruc(drivers.KVS.join_queue(groupid))
+        lruc(drivers.KVS.mark_as_not_ready(self.user.userid))
+        group = lruc(drivers.KVS.get_group(groupid))
+        self.assertEqual(group.state, State.GROUP_CHECK)
+    
+    def test_mark_unmark_ready(self):
+        """Test mark_as_ready/mark_as_not_ready on a couple of game state"""
+        coro = drivers.KVS.mark_as_ready(self.user.userid)
+        self.assertRaises(PlayerNotInGroup, lruc, coro)
+
+        groupid = lruc(drivers.KVS.create_group(self.user.userid,
+                                                self.game.gameid))
+        lruc(drivers.KVS.mark_as_ready(self.user.userid))
+        lruc(drivers.KVS.join_queue(groupid))
+        coro = drivers.KVS.mark_as_ready(self.user.userid)
+        self.assertRaises(WrongGroupState, lruc, coro)
+        lruc(drivers.KVS.mark_as_not_ready(self.user.userid))
+
+    def test_join_queue_not_all_ready(self):
+        """Joining the queue while all the players are not ready should fail"""
+        player_2 = uuid4()
+        groupid = lruc(drivers.KVS.create_group(self.user.userid,
+                                                self.game.gameid))
+        lruc(drivers.KVS.mark_as_ready(self.user.userid))
+        lruc(drivers.KVS.join_group(groupid, player_2))
+        coro = drivers.KVS.join_queue(groupid)
+        self.assertRaises(GroupNotReady, lruc, coro)
