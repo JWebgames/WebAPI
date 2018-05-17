@@ -4,11 +4,11 @@ from collections import Iterable
 
 
 class WebAPIError(Exception):
-    """Base class for any error"""
+    """Base class for any api error"""
     pass
 
 
-class ConfigError(WebAPIError):
+class ConfigError(Exception):
     """Base class for any configuration error"""
     pass
 
@@ -37,15 +37,10 @@ class ConfigMissingOptionError(ConfigError):
     def __init__(self, missings, block):
         super().__init__(self.template.format(", ".join(missings), block))
 
-
-class DriverError(WebAPIError):
+class GroupError(WebAPIError):
     pass
 
-
-class GroupError(DriverError):
-    pass
-
-class GroupExists(GroupError):
+class GameDoesntExist(GroupError):
     pass
 
 class GroupDoesntExist(GroupError):
@@ -57,11 +52,22 @@ class PlayerInGroupAlready(GroupError):
 class PlayerNotInGroup(GroupError):
     pass
 
-class GroupInQueueAlready(GroupError):
+class PlayerNotInParty(GroupError):
     pass
 
 class GroupIsFull(GroupError):
     pass
 
-class GroupPlayingAlready(GroupError):
+class GroupNotReady(GroupError):
     pass
+
+class WrongGroupState(GroupError):
+    def __init__(self, current, wanted):
+        if isinstance(wanted, Iterable):
+            super().__init__(self, "Current: {}. Require: {{{}}}".format(
+                current.name, ", ".join([w.name for w in wanted])
+            ))
+        else:
+            super().__init__(self, "Current: {}. Require: {}".format(
+                current.name, wanted.name
+            ))

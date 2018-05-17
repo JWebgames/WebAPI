@@ -1,15 +1,21 @@
 """Setup sanic, redis and postgres"""
 
 import logging
+from uuid import uuid4
 import aioredis
 import asyncpg
 from sanic import Sanic
 from sanic.response import text
+import scrypt
+from .tools import lruc
 
 app = Sanic(__name__, configure_logging=False)
 from . import config
 from .storage import drivers
 from .routes.auth import bp as authbp
+from .routes.games import bp as gamesbp
+from .routes.groups import bp as groupsbp
+from .routes.msgqueues import bp as msgqueuesbp
 
 logger = logging.getLogger(__name__)
 
@@ -67,13 +73,21 @@ async def disconnect_from_redis(_app, _loop):
 
 # Register remote or local databases
 if config.webapi.PRODUCTION:
+    logger.info("Running in production mode")
     app.listener("before_server_start")(connect_to_postgres)
     app.listener("before_server_start")(connect_to_redis)
     app.listener("after_server_stop")(disconnect_from_postgres)
     app.listener("after_server_stop")(disconnect_from_redis)
 else:
+    logger.info("Running in development mode")
     drivers.RDB = drivers.SQLite()
     drivers.KVS = drivers.InMemory()
+    toto_id = uuid4()
+    lruc(drivers.RDB.create_user(
+        toto_id, "toto", "toto@example.com",
+        scrypt.encrypt(b"salt", "password", maxtime=0.01)))
+    lruc(drivers.RDB.set_user_admin(toto_id, True))
+    lruc(drivers.RDB.create_game("bomberman", toto_id, 4))
 
 @app.route("/status")
 async def server_status(_req):
@@ -81,3 +95,6 @@ async def server_status(_req):
 
 # Register routes
 app.blueprint(authbp, url_prefix="/v1/auth")
+app.blueprint(gamesbp, url_prefix="/v1/games")
+app.blueprint(groupsbp, url_prefix="/v1/groups")
+app.blueprint(msgqueuesbp, url_prefix="/v1/msgqueues")

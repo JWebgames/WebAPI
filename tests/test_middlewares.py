@@ -16,8 +16,9 @@ from jwt import decode as jwt_decode
 from webapi.tools import generate_token
 from webapi.config import webapi
 from webapi.server import app
-from webapi.middlewares import ClientType, authenticate, require_fields
+from webapi.middlewares import authenticate, require_fields
 from webapi.storage import drivers
+from webapi.storage.models import ClientType
 
 logger = getLogger(__name__)
 
