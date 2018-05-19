@@ -94,7 +94,6 @@ async def get_party_msg(req, jwt):
         raise PlayerNotInParty()
 
     greetings(MsgQueueType.GROUP.value, user.groupid)
-    subfunc = 
     return stream(async_partial(stream_until_event_is_set,
         func=async_partial(sub_proxy(queue=MsgQueueType.PARTY.value,
                                      id_=user.partyid))))
