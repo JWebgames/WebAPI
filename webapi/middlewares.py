@@ -94,9 +94,9 @@ def authenticate(allowed_client_types: set):
 
             try:
                 jwt = jwtlib.decode(bearer[7:].strip(), config.webapi.JWT_SECRET, algorithms=['HS256'])
-            except jwtlib.exceptions.InvalidTokenError:
+            except jwtlib.exceptions.InvalidTokenError as exc:
                 logger.log(45, f"Invalid token (IP: {req.ip})")
-                raise Forbidden("Invalid token")
+                raise Forbidden("Invalid token") from exc
 
             if await drivers.KVS.is_token_revoked(jwt["jti"]):
                 logger.log(45, f"Token has been revoked (IP: {req.ip})")
