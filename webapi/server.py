@@ -15,7 +15,7 @@ from .storage import drivers
 from .routes.auth import bp as authbp
 from .routes.games import bp as gamesbp
 from .routes.groups import bp as groupsbp
-from .routes.msgqueues import bp as msgqueuesbp
+from .routes.msgqueues import bp as msgqueuesbp, close_all_connections
 
 logger = logging.getLogger(__name__)
 
@@ -82,12 +82,17 @@ else:
     logger.info("Running in development mode")
     drivers.RDB = drivers.SQLite()
     drivers.KVS = drivers.InMemory()
+
+    # Feed database with some data
     toto_id = uuid4()
     lruc(drivers.RDB.create_user(
         toto_id, "toto", "toto@example.com",
         scrypt.encrypt(b"salt", "password", maxtime=0.01)))
     lruc(drivers.RDB.set_user_admin(toto_id, True))
     lruc(drivers.RDB.create_game("bomberman", toto_id, 4))
+
+# Register others functions
+app.listener("before_server_stop")(close_all_connections)
 
 @app.route("/status")
 async def server_status(_req):
