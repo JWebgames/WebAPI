@@ -1,6 +1,6 @@
 """Interfaces and implementation of databases drivers"""
 
-from asyncio import ensure_future, gather
+from asyncio import ensure_future, gather, Queue
 from collections import OrderedDict, Iterable, defaultdict
 from datetime import datetime, timedelta
 from json import dumps as json_dumps
@@ -247,7 +247,10 @@ class KeyValueStore():
     async def create_party(self, groupid):
         raise NotImplementedError()
     
-    async def send_message(self, queue, id_, payload):
+    async def send_message(self, queue_group, queue_target, id_, payload):
+        raise NotImplementedError()
+
+    async def recv_messages(self, queue, id_):
         raise NotImplementedError()
 
 
@@ -344,7 +347,7 @@ class Redis(KeyValueStore):
         ensure_future(self.group_cleanup(groupid))
     
     async def group_cleanup(self, groupid):
-        if (await self.scard(group_members_key)) == 0:
+        if (await self.redis.scard(Redis.group_members_key.format(groupid))) == 0:
             await gather(
                 self.redis.delete(Redis.group_gameid_key.format(groupid)),
                 self.redis.delete(Redis.group_state_key.format(groupid)),
@@ -478,9 +481,15 @@ class Redis(KeyValueStore):
         await self.redis.set(group_state_key, State.GROUP_CHECK.value)
     
     async def send_message(self, queue, id_, payload):
-        queue = Redis.msgqueue_key.format(queue, id_)
-        await self.redis.publish(queue, json_dumps(payload).encode("utf-8"))
+        await self.redis.publish(
+            Redis.msgqueue_key.format(queue, id_),
+            json_dumps(payload).encode("utf-8"))
 
+    async def recv_messages(self, queue, id_):
+        key = Redis.msgqueue_key.format(queue, id_)
+        chan = (await self.redis.subscribe(key))[0]
+        while await chan.wait_message():
+            yield await chan.get(encoding="utf-8")
 
 
 class InMemory(KeyValueStore):
@@ -492,10 +501,10 @@ class InMemory(KeyValueStore):
         self.queues = {}  # Dict[gameid, List[slotid]]
         self.slots = {}  # Dict[slotid, Slot]
         self.parties = {}  # Dict[partyid, Party]
-        self.msgqueue = {
-            MsgQueueType.USER: defaultdict(list),
-            MsgQueueType.GROUP: defaultdict(list),
-            MsgQueueType.PARTY: defaultdict(list),
+        self.msgqueues = {
+            MsgQueueType.USER: defaultdict(Queue),
+            MsgQueueType.GROUP: defaultdict(Queue),
+            MsgQueueType.PARTY: defaultdict(Queue),
         }
 
     @fake_async
@@ -670,20 +679,9 @@ class InMemory(KeyValueStore):
         group.slotid = None
         group.state = State.GROUP_CHECK
 
-    @fake_async
-    def send_message(self, queue, id_, message, msgid=None, timestamp=None):
-        if msgid is None:
-            msgid = uuid4()
-        if timestamp is None:
-            timestamp = time()
+    async def send_message(self, queue, id_, payload):
+        await self.msgqueues[queue][id_].put(json_dumps(payload).encode())
 
-        self.msgqueues[queue][id_].append(
-            Message(msgid=msgid, timestamp=timestamp, message=message))
-    
-    @fake_async
-    def recv_messages(self, queue, id_, since=None):
-        if since is None:
-            since=datetime.utcnow() - timedelta(seconds=5)
-        
-        return list(filter(lambda msg: msg.timestamp >= since, 
-                           self.msgqueue[queue].get(id_, [])))
+    async def recv_messages(self, queue, id_):
+        while True:
+            yield await self.msgqueues[queue][id_].get()
