@@ -162,13 +162,13 @@ class TestAuthenticate(TestCase):
         """Fail if the token is revoked"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            _, res_logout = app.test_client.get("/v1/auth/logout", headers={
+            _, res_logout = app.test_client.delete("/v1/auth/", headers={
                 "Authorization": "Bearer: %s" % REVOKED_JWT
             })
             _, res_auth = app.test_client.get("/tests/auth", headers={
                 "Authorization": "Bearer: %s" % REVOKED_JWT
             })
-        self.assertEqual(res_logout.status, 200)
+        self.assertEqual(res_logout.status, 204)
         self.assertEqual(res_auth.status, 403)
         self.assertEqual(res_auth.json["error"], "Revoked token")
 
