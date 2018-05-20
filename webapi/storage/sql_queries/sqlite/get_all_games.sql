@@ -1,2 +1,2 @@
-SELECT gameid, name
+SELECT *
 FROM tbgames
