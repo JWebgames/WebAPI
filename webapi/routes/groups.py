@@ -17,14 +17,14 @@ async def group_state(req, groupid, jwt):
     return json(group.asdict())
 
 
-@bp.route("/create/<gameid>", methods=["POST"])
+@bp.route("/create/<gameid:int>", methods=["POST"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
 async def create(req, gameid, jwt):
     groupid = await drivers.KVS.create_group(jwt["uid"], gameid)
     return json({"groupid": str(groupid)})
 
 
-@bp.route("/invite/<userid>", methods=["GET"])
+@bp.route("/invite/<userid>", methods=["POST"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
 async def invite(req, userid, jwt):
     user = await drivers.KVS.get_user(jwt["uid"])
@@ -44,7 +44,7 @@ async def invite(req, userid, jwt):
     return text("", status=204)
 
 
-@bp.route("/join/<groupid>", methods=["GET"])
+@bp.route("/join/<groupid>", methods=["POST"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
 async def join(req, groupid, jwt):
     await drivers.KVS.join_group(groupid, jwt["uid"])
@@ -59,7 +59,7 @@ async def join(req, groupid, jwt):
     return text("", status=204)
 
 
-@bp.route("/leave", methods=["GET"])
+@bp.route("/leave", methods=["DELETE"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
 async def leave(req, jwt):
     user = await drivers.KVS.get_user(jwt["uid"])
@@ -74,7 +74,7 @@ async def leave(req, jwt):
     return text("", status=204)
 
 
-@bp.route("/ready", methods=["GET"])
+@bp.route("/ready", methods=["POST"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
 async def ready(req, jwt):
     await drivers.KVS.mark_as_ready(jwt["uid"])
@@ -104,7 +104,7 @@ async def notready(req, jwt):
     return text("", status=204)
 
 
-@bp.route("/start", methods=["GET"])
+@bp.route("/start", methods=["POST"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
 async def start(req, jwt):
     user = await drivers.KVS.get_user(jwt["uid"])
