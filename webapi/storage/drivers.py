@@ -13,9 +13,8 @@ from time import time
 from aioredis import Redis as AIORedis
 from asyncpg import Record
 from sqlite3 import connect as sqlite3_connect
-from .models import User, Game, LightGame, \
-                    Group, UserKVS, Slot, Message, \
-                    State, MsgQueueType
+from .models import User, Game, State, MsgQueueType, \
+                    Group, UserKVS, Slot, Message
 from ..tools import root, fake_async
 from webapi.exceptions import PlayerInGroupAlready, \
                               PlayerNotInGroup, \
@@ -107,7 +106,7 @@ class Postgres(RelationalDataBase):
             ("set_user_admin", 2, None, 0),
             ("set_user_verified", 2, None, 0),
             ("create_game", 3, AutoIncr, 1),
-            ("get_all_games", 0, LightGame, 2),
+            ("get_all_games", 0, Game, 2),
             ("get_game_by_id", 1, Game, 1),
             ("get_game_by_name", 1, Game, 1),
             ("get_games_by_owner", 1, Game, 2),
@@ -129,36 +128,41 @@ class Postgres(RelationalDataBase):
 
             elif resultcnt == 1:
                 async def wrapped_one(*args):
-                    result = await query.fetchrow(*args)
-                    if not result:
+                    row = await query.fetchval(*args)
+                    if not row:
                         raise NotFoundError()
-                    if not isinstance(result[name], Iterable):
-                        return class_(result[name])
-                    if isinstance(result[name], Record):
-                        return class_(**dict(result[name].items()))
-                    elif isinstance(result[name], tuple):
-                        return class_(*result[name])
+                    if isinstance(row, Record):
+                        return class_(**dict(row.items()))
+                    elif isinstance(row, tuple):
+                        return class_(*row)
                     else:
-                        err = "{} (type: {}) is not either {}".format(
-                            result[name], type(result[name]),
-                            " or ".join(map(str, [tuple, Record]))) 
-                        raise TypeError(err)
+                        try:
+                            class_(row)
+                        except Exception as exc:
+                            err = "{} (type: {}) is not either {}".format(
+                                row, type(row),
+                                " or ".join(map(str, [tuple, Record]))) 
+                            raise TypeError(err) from exc
                 return wrapped_one
             
             else:
                 async def wrapped_many(*args):
-                    result = await query.fetchrow(*args)
+                    result = await query.fetchval(*args)
                     if not result:
                         return []
-                    if isinstance(result[name][0], Record):
-                        return map(lambda row: class_(**dict(row.items())), result[name])
-                    elif isinstance(result[name][0], tuple):
-                        return map(lambda row: class_(*row), result[name])
+                    rows = [result] if isinstance(result, (Record, tuple)) else result
+                    if isinstance(rows[0], Record):
+                        return map(lambda row: class_(**dict(row.items())), rows)
+                    elif isinstance(rows[0], tuple):
+                        return map(lambda row: class_(*row), rows)
                     else:
-                        err = "{} (type: {}) is not either {}".format(
-                            result[name][0], type(result[name][0]),
-                            " or ".join(map(str, [tuple, Record]))) 
-                        raise TypeError(err)
+                        try:
+                            [class_(result)]
+                        except Exception as exc:
+                            err = "{} (type: {}) is not either {}".format(
+                                result[name], type(result[name]),
+                                " or ".join(map(str, [tuple, Record]))) 
+                            raise TypeError(err) from exc
                 return wrapped_many
 
         for name, args_count, class_, result_count in functions:
@@ -177,24 +181,26 @@ class SQLite(RelationalDataBase):
                 plop.append(dq(idk[idx]))
             return plop
 
-        def wrap(sql, class_=None):
+        def wrap(sql, class_, resultcnt):
             @fake_async
             def wrapped(*args):
                 args = list(args)
                 for i in range(len(args)):
                     if isinstance(args[i], UUID):
                         args[i] = str(args[i])
-                rows = self.conn.cursor().execute(sql, args).fetchall()
-                if class_ is None:
-                    return rows[0] if len(rows) == 1 else rows
-                if class_ is AutoIncr:
-                    query = "SELECT last_insert_rowid()"
-                    return self.conn.cursor().execute(query).fetchone()[0]
-                if len(rows) == 0:
-                    return None
-                elif len(rows) == 1 and class_ not in [LightGame]:
-                    return class_(*fuck(class_, rows[0]))
-                return map(lambda row: class_(*fuck(class_, row)), rows)
+                if resultcnt == 0:
+                    self.conn.cursor().execute(sql, args)
+                elif resultcnt == 1:
+                    row = self.conn.cursor().execute(sql, args).fetchone()
+                    if class_ is AutoIncr:
+                        query = "SELECT last_insert_rowid()"
+                        return self.conn.cursor().execute(query).fetchone()[0]
+                    if row is None:
+                        raise NotFoundError()
+                    return class_(*fuck(class_, row))
+                else:
+                    rows = self.conn.cursor().execute(sql, args).fetchall()
+                    return map(lambda row: class_(*fuck(class_, row)), rows)
             return wrapped
 
         create_tables = [
@@ -205,22 +211,22 @@ class SQLite(RelationalDataBase):
                 self.conn.cursor().execute(sqlfile.read())
 
         functions = [
-            ("create_user", None),
-            ("get_user_by_id", User),
-            ("get_user_by_login", User),
-            ("set_user_admin", None),
-            ("set_user_verified", None),
-            ("create_game", AutoIncr),
-            ("get_all_games", LightGame),
-            ("get_game_by_id", Game),
-            ("get_game_by_name", Game),
-            ("get_games_by_owner", Game),
-            ("set_game_owner", None)
+            ("create_user", None, 0),
+            ("get_user_by_id", User, 1),
+            ("get_user_by_login", User, 1),
+            ("set_user_admin", None, 0),
+            ("set_user_verified", None, 0),
+            ("create_game", AutoIncr, 1),
+            ("get_all_games", Game, 2),
+            ("get_game_by_id", Game, 1),
+            ("get_game_by_name", Game, 1),
+            ("get_games_by_owner", Game, 2),
+            ("set_game_owner", None, 0)
         ]
 
-        for function, class_ in functions:
+        for function, class_, result_count in functions:
             with sqldir.joinpath("%s.sql" % function).open() as sqlfile:
-                setattr(self, function, wrap(sqlfile.read(), class_))
+                setattr(self, function, wrap(sqlfile.read(), class_, result_count))
 
 
 class KeyValueStore():
@@ -249,16 +255,16 @@ class KeyValueStore():
         """Get a group given its id"""
         raise NotImplementedError()
     
-    async def get_group_of_user(self, userid):
-        """Get the group of the user"""
-        raise NotImplementedError()
-    
     async def mark_as_ready(self, userid):
-        """Mark self as ready"""
+        """Mark user as ready"""
         raise NotImplementedError()
     
     async def mark_as_not_ready(self, userid):
-        """Mark self as not ready (group-check/party-check)"""
+        """Mark user as not ready"""
+        raise NotImplementedError()
+    
+    async def is_user_ready(self, userid):
+        """Check the readyness of a user"""
         raise NotImplementedError()
 
     async def leave_group(self, userid):
@@ -308,6 +314,18 @@ class Redis(KeyValueStore):
 
     async def is_token_revoked(self, token_id) -> bool:
         return await self.redis.zscore("trl", token_id) != None
+    
+    async def get_user(self, userid):
+        groupid = await self.redis.get(Redis.user_groupid_key.format(userid))
+        if groupid is None:
+            raise PlayerNotInGroup()
+        partyid = await self.redis.get(Redis.user_partyid_key.format(userid))
+        ready = await self.redis.get(Redis.user_ready_key.format(userid))
+
+        return UserKVS(UUID(groupid.decode()),
+                       partyid and UUID(partyid.decode()),
+                       ready == b"1")
+
 
     async def create_group(self, userid, gameid):
         user_groupid_key = Redis.user_groupid_key.format(userid)
@@ -334,6 +352,8 @@ class Redis(KeyValueStore):
         user_groupid_key = Redis.user_groupid_key.format(userid)
         if (await self.redis.get(user_groupid_key)) is not None:
             raise PlayerInGroupAlready()
+
+        await self.redis.set(Redis.user_ready_key.format(userid), b"0")
 
         gameid = await self.redis.get(Redis.group_gameid_key.format(groupid))
         if gameid is None:
@@ -430,6 +450,12 @@ class Redis(KeyValueStore):
             await self.leave_queue(groupid)
         
         await self.redis.set(Redis.user_ready_key.format(userid), b"0")
+    
+    async def is_user_ready(self, userid):
+        ready = self.redis.get(Redis.user_ready_key.format(userid))
+        if ready is None:
+            raise PlayerNotInGroup()
+        return ready == b"1"
 
     async def is_ready(self, userid):
         return (await self.redis.get(Redis.user_ready_key.format(userid))) == b"1"
@@ -560,7 +586,7 @@ class InMemory(KeyValueStore):
     def get_user(self, userid):
         user = self.users.get(userid)
         if user is None:
-            raise PlayerInGroupAlready
+            raise PlayerNotInGroup()
         return user
 
     async def join_group(self, groupid, userid):
@@ -587,13 +613,6 @@ class InMemory(KeyValueStore):
         if group is None:
             raise GroupDoesntExist()
         return group
-    
-    @fake_async
-    def get_group_of_user(self, userid):
-        user = self.users.get(userid)
-        if user is None:
-            raise PlayerNotInGroup()
-        return self.groups[user.groupid]
 
     @fake_async
     def mark_as_ready(self, userid):
@@ -628,8 +647,12 @@ class InMemory(KeyValueStore):
         user = self.users.get(userid)
         if user is None or user.groupid is None:
             raise PlayerNotInGroup()
-        
         group = self.groups[user.groupid]
+
+        valids = [State.GROUP_CHECK, State.IN_QUEUE]
+        if group.state not in valids:
+            raise WrongGroupState(state, valids)
+        
         if group.state == State.IN_QUEUE:
             self.leave_queue(self, None, group)
         del self.users[userid]
