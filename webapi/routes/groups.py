@@ -1,9 +1,11 @@
 from logging import getLogger
 from sanic import Blueprint
 from sanic.response import json, text
+from sanic.exceptions import NotFound
 from ..middlewares import authenticate, require_fields
 from ..storage import drivers 
 from ..storage.models import ClientType, MsgQueueType
+from ..exceptions import PlayerNotInGroup
 from json import loads as json_loads
 
 bp = Blueprint("groups")
@@ -12,9 +14,20 @@ logger = getLogger(__name__)
 
 @bp.route("/", methods=["GET"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
-async def group_state(req, groupid, jwt):
-    group = await drivers.KVS.get_group_of_user(jwt["uid"])
-    return json(group.asdict())
+async def group_state(req, jwt):
+    try:
+        user = await drivers.KVS.get_user(jwt["uid"])
+    except PlayerNotInGroup as exc:
+        raise NotFound("Player not in group") from exc
+    group = await drivers.KVS.get_group(user.groupid)
+    jsonbody = user.asdict()
+    jsonbody.update(group.asdict())
+    jsonbody["members"] = [
+        {"name": (await drivers.RDB.get_user_by_id(userid)).name,
+         "ready": await drivers.KVS.is_user_ready(userid),
+         "id": userid} for userid in jsonbody["members"]]
+    del jsonbody["ready"]
+    return json(jsonbody)
 
 
 @bp.route("/create/<gameid:int>", methods=["POST"])
