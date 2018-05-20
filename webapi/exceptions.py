@@ -37,6 +37,9 @@ class ConfigMissingOptionError(ConfigError):
     def __init__(self, missings, block):
         super().__init__(self.template.format(", ".join(missings), block))
 
+class NotFoundError(WebAPIError):
+    pass
+
 class GroupError(WebAPIError):
     pass
 

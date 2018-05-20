@@ -23,7 +23,8 @@ from webapi.exceptions import PlayerInGroupAlready, \
                               GroupIsFull, \
                               GroupNotReady, \
                               WrongGroupState, \
-                              GameDoesntExist
+                              GameDoesntExist, \
+                              NotFoundError
 from uuid import UUID, uuid4
 from time import time
 from typing import NewType
@@ -100,20 +101,20 @@ class Postgres(RelationalDataBase):
         """Cache all SQL available functions"""
 
         functions = [
-            ("create_user", 4, None),
-            ("get_user_by_id", 1, User),
-            ("get_user_by_login", 1, User),
-            ("set_user_admin", 2, None),
-            ("set_user_verified", 2, None),
-            ("create_game", 3, AutoIncr),
-            ("get_all_games", 0, LightGame),
-            ("get_game_by_id", 1, Game),
-            ("get_game_by_name", 1, Game),
-            ("get_games_by_owner", 1, Game),
-            ("set_game_owner", 2, None)
+            ("create_user", 4, None, 0),
+            ("get_user_by_id", 1, User, 1),
+            ("get_user_by_login", 1, User, 1),
+            ("set_user_admin", 2, None, 0),
+            ("set_user_verified", 2, None, 0),
+            ("create_game", 3, AutoIncr, 1),
+            ("get_all_games", 0, LightGame, 2),
+            ("get_game_by_id", 1, Game, 1),
+            ("get_game_by_name", 1, Game, 1),
+            ("get_games_by_owner", 1, Game, 2),
+            ("set_game_owner", 2, None, 0)
         ]
 
-        async def wrap(name, argscnt, class_=None):
+        async def wrap(name, argscnt, class_, resultcnt):
             """Create the prepated statement"""
             if argscnt:
                 sqlargs = ", $".join(map(str, range(1, argscnt + 1)))
@@ -121,19 +122,47 @@ class Postgres(RelationalDataBase):
             else:
                 query = await self.conn.prepare("SELECT %s()" % name)
 
-            async def wrapped(*args):
-                """Do the database call"""
-                rows = (await query.fetchrow(*args))[name]
-                if class_ is None or rows is None:
-                    return rows
-                if isinstance(rows, Record):
-                    return class_(**dict(rows.items()))
-                if isinstance(rows, Iterable):
-                    return map(lambda row: class_(**dict(row.items())), rows)
-            return wrapped
+            if resultcnt == 0:
+                async def wrapped_none(*args):
+                    await query.fetchrow(*args)
+                return wrapped_none
 
-        for name, args_count, class_ in functions:
-            setattr(self, name, await wrap(name, args_count, class_))
+            elif resultcnt == 1:
+                async def wrapped_one(*args):
+                    result = await query.fetchrow(*args)
+                    if not result:
+                        raise NotFoundError()
+                    if not isinstance(result[name], Iterable):
+                        return class_(result[name])
+                    if isinstance(result[name], Record):
+                        return class_(**dict(result[name].items()))
+                    elif isinstance(result[name], tuple):
+                        return class_(*result[name])
+                    else:
+                        err = "{} (type: {}) is not either {}".format(
+                            result[name], type(result[name]),
+                            " or ".join(map(str, [tuple, Record]))) 
+                        raise TypeError(err)
+                return wrapped_one
+            
+            else:
+                async def wrapped_many(*args):
+                    result = await query.fetchrow(*args)
+                    if not result:
+                        return []
+                    if isinstance(result[name][0], Record):
+                        return map(lambda row: class_(**dict(row.items())), result[name])
+                    elif isinstance(result[name][0], tuple):
+                        return map(lambda row: class_(*row), result[name])
+                    else:
+                        err = "{} (type: {}) is not either {}".format(
+                            result[name][0], type(result[name][0]),
+                            " or ".join(map(str, [tuple, Record]))) 
+                        raise TypeError(err)
+                return wrapped_many
+
+        for name, args_count, class_, result_count in functions:
+            setattr(self, name, await wrap(name, args_count, class_, result_count))
 
 
 class SQLite(RelationalDataBase):
@@ -482,11 +511,11 @@ class Redis(KeyValueStore):
     
     async def send_message(self, queue, id_, payload):
         await self.redis.publish(
-            Redis.msgqueue_key.format(queue, id_),
+            Redis.msgqueue_key.format(queue.value, id_),
             json_dumps(payload).encode("utf-8"))
 
     async def recv_messages(self, queue, id_):
-        key = Redis.msgqueue_key.format(queue, id_)
+        key = Redis.msgqueue_key.format(queue.value, id_)
         chan = (await self.redis.subscribe(key))[0]
         while await chan.wait_message():
             yield await chan.get(encoding="utf-8")
