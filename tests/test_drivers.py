@@ -300,6 +300,6 @@ class TestMsgQueue(TestCase):
                 return msg
 
         payload = {"value": randint(0, 99)}
-        asyncio.get_event_loop().call_later(0.2, asyncio.ensure_future, feeder(payload))
-        self.assertEqual(json.loads(lruc(asyncio.wait_for(reciever(), 1))), payload)
+        asyncio.get_event_loop().call_later(0.1, asyncio.ensure_future, feeder(payload))
+        self.assertEqual(json.loads(lruc(asyncio.wait_for(reciever(), 0.2))), payload)
       
