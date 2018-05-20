@@ -19,21 +19,20 @@ tasks = []
 stop_events = []
 
 async def heartbeat(res, stop_event):
-    logger.info("Start beating on %s", res)
+    logger.debug("Start heart-beating on %s", res.transport)
     with suppress(asyncio.CancelledError):
         while True:
             await asyncio.sleep(30)
             if res.transport.is_closing():
-                logger.debug("Transport %s closed", res.transport)
                 stop_event.set()
                 break
             res.write('{"type":"heartbeat"}')
             res.write(chr(30))  # ascii unit separator
-    logger.info("Stop beating on %s", res)
+    logger.debug("Stop heart-beating on %s", res.transport)
 
 
 async def sub_proxy(res, stop_event, queue, id_):
-    logger.info("%s subscribed to queue %s:%s", res, queue, id_)
+    logger.info("New subscribtion to queue %s:%s", queue, id_)
     with suppress(asyncio.CancelledError):
         for msg in drivers.KVS.recv_messages(queue, id_):
             if res.transport.is_closing():
@@ -44,34 +43,34 @@ async def sub_proxy(res, stop_event, queue, id_):
                          msg, queue, id_, res)
             res.write(msg)
             res.write(chr(30))  # ascii unit separator
-    logger.info("%s's subscribtion to queue %s ended", res, queue)
+    logger.info("Subscribtion to queue %s:%s over", queue, id_)
 
 
-async def stream_until_event_is_set(res, func):
+async def stream_until_event_is_set(res, stream_func):
     stop_event = asyncio.Event()
-    func_task = asyncio.ensure_future(func(res, stop_event))
+    sf_task = asyncio.ensure_future(stream_func(res, stop_event))
     hb_task = asyncio.ensure_future(heartbeat(res, stop_event))
 
     stop_events.append(stop_event)
-    tasks.extend([func_task, hb_task])
+    tasks.extend([sf_task, hb_task])
 
     with suppress(asyncio.CancelledError):
         await stop_event.wait()
-    func_task.cancel()
+    sf_task.cancel()
     hb_task.cancel()
 
     stop_events.remove(stop_event)
-    tasks.remove(func_task)
+    tasks.remove(sf_task)
     tasks.remove(hb_task)
 
 
 @bp.route("/user", methods=["GET"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
 async def get_user_msg(req, jwt):
-    greetings(MsgQueueType.USER.value, user["jwt"])
+    greetings(MsgQueueType.USER, jwt["uid"])
     return stream(async_partial(stream_until_event_is_set,
-        func=async_partial(sub_proxy(queue=MsgQueueType.PLAYER.value,
-                                     id_=jwt["uid"]))))
+        stream_func=async_partial(sub_proxy,
+            queue=MsgQueueType.USER, id_=jwt["uid"])))
     
 
 @bp.route("/group", methods=["GET"])
@@ -81,10 +80,10 @@ async def get_group_msg(req, jwt):
     if user.groupid is None:
         raise PlayerNotInGroup()
 
-    greetings(MsgQueueType.PARTY.value, user.partyid)
+    greetings(MsgQueueType.GROUP, user.partyid)
     return stream(async_partial(stream_until_event_is_set,
-        func=async_partial(sub_proxy(queue=MsgQueueType.GROUP.value,
-                                     id_=user.groupid))))
+        stream_func=async_partial(sub_proxy,
+            queue=MsgQueueType.GROUP, id_=user.groupid)))
 
 @bp.route("/party", methods=["GET"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
@@ -93,13 +92,14 @@ async def get_party_msg(req, jwt):
     if user.partyid is None:
         raise PlayerNotInParty()
 
-    greetings(MsgQueueType.GROUP.value, user.groupid)
+    greetings(MsgQueueType.PARTY, user.groupid)
     return stream(async_partial(stream_until_event_is_set,
-        func=async_partial(sub_proxy(queue=MsgQueueType.PARTY.value,
-                                     id_=user.partyid))))
+        stream_func=async_partial(sub_proxy,
+            queue=MsgQueueType.PARTY, id_=user.partyid)))
 
 def greetings(queue, id_):
-    payload = {"type":"server:notice","notice":"hello %d" % queue.value}
+    payload = {"type": "server:notice",
+               "notice": "hello to {!s} on {!s}".format(id_, queue)}
     coro = drivers.KVS.send_message(queue, id_, payload)
     asyncio.get_event_loop().call_later(0.2, asyncio.ensure_future, coro)
 
