@@ -16,8 +16,8 @@ CREATE FUNCTION create_game(name varchar(24), ownerid uuid, capacity smallint) R
     RETURNING gameid
 $$ LANGUAGE SQL;
 
-CREATE FUNCTION get_all_games() RETURNS TABLE (gameid SMALLINT, name varchar(24)) AS $$
-    SELECT gameid, name
+CREATE FUNCTION get_all_games() RETURNS tbgames AS $$
+    SELECT *
     FROM tbgames
 $$ LANGUAGE SQL;
 

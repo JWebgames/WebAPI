@@ -135,3 +135,14 @@ def fake_async(func):
 
 def lruc(coro, loop=get_event_loop()):
     return loop.run_until_complete(coro)
+
+
+def async_partial(func, *args, **keywords):
+    async def newfunc(*fargs, **fkeywords):
+        newkeywords = keywords.copy()
+        newkeywords.update(fkeywords)
+        return await func(*args, *fargs, **newkeywords)
+    newfunc.func = func
+    newfunc.args = args
+    newfunc.keywords = keywords
+    return newfunc

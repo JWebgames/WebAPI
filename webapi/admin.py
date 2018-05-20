@@ -7,7 +7,7 @@ from scrypt import encrypt as scrypt_encrypt
 from .config import show as show_config
 from .server import connect_to_postgres
 from .storage import drivers
-from .tools import ask_bool
+from .tools import ask_bool, lruc
 
 def wizard():
     loop = asyncio.get_event_loop()
@@ -48,4 +48,12 @@ def wizard():
             if ask_bool("%s admin privileges ?" % action):
                 coro = drivers.RDB.set_user_admin(user.userid, not user.isadmin)
                 loop.run_until_complete(coro)
+                print("Done")
+        
+        if ask_bool("Create a game ?"):
+            name = input("Game name: ")
+            cap = int(input("Capacity: "))
+            user = lruc(drivers.RDB.get_user_by_login(input("Owner login: ")))
+            if ask_bool("Process with game creation ?"):
+                lruc(drivers.RDB.create_game(name, user.userid, cap))
                 print("Done")

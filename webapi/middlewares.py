@@ -94,9 +94,9 @@ def authenticate(allowed_client_types: set):
 
             try:
                 jwt = jwtlib.decode(bearer[7:].strip(), config.webapi.JWT_SECRET, algorithms=['HS256'])
-            except jwtlib.exceptions.InvalidTokenError:
+            except jwtlib.exceptions.InvalidTokenError as exc:
                 logger.log(45, f"Invalid token (IP: {req.ip})")
-                raise Forbidden("Invalid token")
+                raise Forbidden("Invalid token") from exc
 
             if await drivers.KVS.is_token_revoked(jwt["jti"]):
                 logger.log(45, f"Token has been revoked (IP: {req.ip})")
@@ -133,9 +133,15 @@ def require_fields(fields: set):
             template = "Fields {{{}}} are missing"
             if not req.json:
                 raise InvalidUsage(template.format(", ".join(fields)))
-            missings = fields - req.json.keys()
-            if missings:
-                raise InvalidUsage(template.format(", ".join(missings)))
+            missing_keys = fields - req.json.keys()
+            if missing_keys:
+                raise InvalidUsage(template.format(", ".join(missing_keys)))
+            missing_values = [key for key in (req.json.keys() & fields)
+                              if req.json[key] is None 
+                                 or (type(req.json[key]) is str
+                                     and not req.json[key].strip())]
+            if missing_values:
+                raise InvalidUsage(template.format(", ".join(missing_values)))
             return await func(req, *args, **req.json, **kwargs)
         return require_fields_wrapped
     return require_fields_wrapper
