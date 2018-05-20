@@ -1,8 +1,27 @@
 """Data models"""
 
-from typing import NamedTuple, List, Optional
+from typing import NamedTuple, List, Optional, Tuple
 from uuid import UUID
 from enum import Enum
+from collections import Iterable
+
+class jsonable:
+    def asdict(self):
+        if hasattr(self, "_asdict"):
+            dict_ = self._asdict()
+        else:
+            dict_ = self.__dict__.copy()
+        for key, value in dict_.items():
+            if type(value) is not str and isinstance(value, Iterable):
+                for idx, sub_value in enumerate(value.copy()):
+                    if isinstance(sub_value, UUID):
+                        dict_[key][idx] = str(sub_value)
+            elif isinstance(value, UUID):
+                dict_[key] = str(value)
+            elif isinstance(value, Enum):
+                dict_[key] = value.name
+        return dict_
+
 
 class ClientType(Enum):
     """Enum of JWT user type"""
@@ -27,13 +46,21 @@ class MsgQueueType(Enum):
     PARTY = "party"
 
 
-class User(NamedTuple):
+class User(jsonable):
     userid: UUID
     name: str
     email: str
     password: bytes
     isverified: bool
     isadmin: bool
+
+    def __init__(self, userid, name, email, password, isverified, isadmin):
+        self.userid = userid
+        self.name = name
+        self.email = email
+        self.password = password
+        self.isverified = isverified
+        self.isadmin = isadmin
 
     def __str__(self):
         tmpl = "User(userid={userid}, name={name}, " \
@@ -42,19 +69,20 @@ class User(NamedTuple):
         return tmpl.format(**self._asdict())
 
 
-class LightGame(NamedTuple):
-    gameid: int
-    name: str
-
-
-class Game(NamedTuple):
+class Game(jsonable):
     gameid: int
     name: str
     ownerid: UUID
     capacity: int
 
+    def __init__(self, gameid, name, ownerid, capacity):
+        self.gameid = gameid
+        self.name = name
+        self.ownerid = ownerid
+        self.capacity = capacity
 
-class Group:
+
+class Group(jsonable):
     state: State
     members: List[UUID]
     gameid: UUID
@@ -68,17 +96,8 @@ class Group:
         self.slotid = slotid
         self.partyid = partyid
 
-    def asdict():
-        return {
-            "state": self.state.value,
-            "members": list(map(str, self.members)),
-            "gameid": str(self.gameid),
-            "slotid": self.slotid and str(self.slotid),
-            "partyid": self.partyid and str(self.partyid)
-        }
 
-
-class UserKVS:
+class UserKVS(jsonable):
     groupid: Optional[UUID]
     partyid: Optional[UUID]
     ready: bool
@@ -87,45 +106,22 @@ class UserKVS:
         self.groupid = groupid
         self.partyid = partyid
         self.ready = ready
-    
-    def asdict():
-        return {
-            "groupid": self.groupid and str(self.groupid),
-            "partyid": self.partyid and str(self.partyid),
-            "ready": self.ready
-        }
 
-class Slot:
+class Slot(jsonable):
     players: List[UUID]
     groups: List[UUID]
 
     def __init__(self, players, groups):
         self.players = players
         self.groups = groups
-    
-    def asdict():
-        return {
-            "members": list(map(str, self.members)),
-            "groups": list(map(str, self.groups))
-        }
 
-class Party:
+class Party(jsonable):
     slotid: UUID
 
     def __init__(self, slotid):
         self.slotid = slotid
-    
-    def asdict():
-        return {
-            "slotid": str(self.slotid)
-        }
 
 class Message(NamedTuple):
     msgid: UUID
     timestamp: float
     message: str
-
-    def asdict(self):
-        d = super()._asdict()
-        d["msgid"] = str(d["msgid"])
-        return d
