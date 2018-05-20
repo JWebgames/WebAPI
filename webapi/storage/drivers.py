@@ -175,12 +175,6 @@ class SQLite(RelationalDataBase):
         self.conn = sqlite3_connect(":memory:")
         sqldir = Path(root()).joinpath("storage", "sql_queries", "sqlite")
 
-        def fuck(namedtuple, idk):
-            plop = []
-            for idx, dq in enumerate(namedtuple._field_types.values()):
-                plop.append(dq(idk[idx]))
-            return plop
-
         def wrap(sql, class_, resultcnt):
             @fake_async
             def wrapped(*args):
@@ -197,10 +191,10 @@ class SQLite(RelationalDataBase):
                         return self.conn.cursor().execute(query).fetchone()[0]
                     if row is None:
                         raise NotFoundError()
-                    return class_(*fuck(class_, row))
+                    return class_(*row)
                 else:
                     rows = self.conn.cursor().execute(sql, args).fetchall()
-                    return map(lambda row: class_(*fuck(class_, row)), rows)
+                    return map(class_, rows)
             return wrapped
 
         create_tables = [

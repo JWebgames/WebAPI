@@ -55,12 +55,12 @@ class User(jsonable):
     isadmin: bool
 
     def __init__(self, userid, name, email, password, isverified, isadmin):
-        self.userid = userid
+        self.userid = userid if isinstance(userid, UUID) else UUID(userid)
         self.name = name
         self.email = email
         self.password = password
-        self.isverified = isverified
-        self.isadmin = isadmin
+        self.isverified = bool(isverified)
+        self.isadmin = bool(isadmin)
 
     def __str__(self):
         tmpl = "User(userid={userid}, name={name}, " \
@@ -76,10 +76,10 @@ class Game(jsonable):
     capacity: int
 
     def __init__(self, gameid, name, ownerid, capacity):
-        self.gameid = gameid
+        self.gameid = int(gameid)
         self.name = name
-        self.ownerid = ownerid
-        self.capacity = capacity
+        self.ownerid = ownerid if isinstance(ownerid, UUID) else UUID(ownerid)
+        self.capacity = int(capacity)
 
 
 class Group(jsonable):
@@ -107,6 +107,7 @@ class UserKVS(jsonable):
         self.partyid = partyid
         self.ready = ready
 
+
 class Slot(jsonable):
     players: List[UUID]
     groups: List[UUID]
@@ -115,11 +116,13 @@ class Slot(jsonable):
         self.players = players
         self.groups = groups
 
+
 class Party(jsonable):
     slotid: UUID
 
     def __init__(self, slotid):
         self.slotid = slotid
+
 
 class Message(NamedTuple):
     msgid: UUID
