@@ -1,3 +1,4 @@
+from contextlib import suppress
 from datetime import datetime, timedelta
 from logging import getLogger
 from uuid import uuid4
@@ -12,6 +13,7 @@ from .. import config
 from ..middlewares import authenticate, require_fields
 from ..storage import drivers
 from ..storage.models import ClientType
+from ..exceptions import NotFoundError, WrongGroupState, PlayerNotInGroup
 
 bp = Blueprint("auth")
 logger = getLogger(__name__)
@@ -29,10 +31,11 @@ async def register(req, username, email, password):
 @bp.route("/", methods=["POST"])
 @require_fields({"login", "password"})
 async def login(req, login, password):
-    user = await drivers.RDB.get_user_by_login(login)
-    if user is None:
+    try:
+        user = await drivers.RDB.get_user_by_login(login)
+    except NotFoundError as exc:
         logger.log(45, "User not found (IP: %s)", req.ip)
-        raise NotFound("User not found")
+        raise NotFound("User not found") from exc
 
     try:
         scrypt.decrypt(user.password, password, encoding=None)
@@ -58,6 +61,8 @@ async def login(req, login, password):
 @bp.route("/", methods=["DELETE"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
 async def logout(req, jwt):
+    with suppress(PlayerNotInGroup, WrongGroupState):
+        await drivers.KVS.leave_group(jwt["uid"])
     await drivers.KVS.revoke_token(jwt)
     logger.info("User disconnected: %s", jwt["jti"])
     return text("", status=204)
