@@ -117,9 +117,9 @@ class Postgres(RelationalDataBase):
             """Create the prepated statement"""
             if argscnt:
                 sqlargs = ", $".join(map(str, range(1, argscnt + 1)))
-                query = await self.conn.prepare("SELECT %s($%s)" % (name, sqlargs))
+                query = await self.conn.prepare("SELECT * FROM %s($%s)" % (name, sqlargs))
             else:
-                query = await self.conn.prepare("SELECT %s()" % name)
+                query = await self.conn.prepare("SELECT * FROM %s()" % name)
 
             if resultcnt == 0:
                 async def wrapped_none(*args):
@@ -129,6 +129,7 @@ class Postgres(RelationalDataBase):
             elif resultcnt == 1:
                 async def wrapped_one(*args):
                     row = await query.fetchval(*args)
+                    logger.debug(row)
                     if not row:
                         raise NotFoundError()
                     if isinstance(row, Record):
@@ -147,11 +148,12 @@ class Postgres(RelationalDataBase):
             
             else:
                 async def wrapped_many(*args):
-                    result = await query.fetchval(*args)
+                    result = await query.fetch(*args)
                     if not result:
                         return []
+                    logger.debug(result)
                     rows = [result] if isinstance(result, (Record, tuple)) else result
-                    if isinstance(rows[0], Record):
+                    if isinstance(rows[0], Record): 
                         return map(lambda row: class_(**dict(row.items())), rows)
                     elif isinstance(rows[0], tuple):
                         return map(lambda row: class_(*row), rows)
