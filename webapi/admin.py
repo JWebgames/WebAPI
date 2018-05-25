@@ -17,7 +17,7 @@ def wizard():
 
     print()
     if ask_bool("Configure postgres ?"):
-        loop.run_until_complete(connect_to_postgres(None, loop, prepare=False))
+        loop.run_until_complete(connect_to_postgres(None, loop))
 
         if ask_bool("Initialize the database ?"):
             loop.run_until_complete(drivers.RDB.install())

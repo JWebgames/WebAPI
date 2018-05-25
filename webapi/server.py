@@ -19,7 +19,7 @@ from .routes.msgqueues import bp as msgqueuesbp, close_all_connections
 
 logger = logging.getLogger(__name__)
 
-async def connect_to_postgres(_app, loop, prepare=True):
+async def connect_to_postgres(_app, loop):
     """Connect to postgres and expose the connection object"""
     logger.info("Connecting to postgres...")
     postgres = await asyncpg.connect(
@@ -33,8 +33,6 @@ async def connect_to_postgres(_app, loop, prepare=True):
     )
     drivers.RDB = drivers.Postgres(postgres)
     logger.info("Connection to postgres established.")
-    if prepare:
-        await drivers.RDB.prepare()
 
 
 async def connect_to_redis(_app, loop):

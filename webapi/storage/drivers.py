@@ -72,6 +72,10 @@ class RelationalDataBase():
     async def get_games_by_owner(self, ownerid):
         """Get games given their owner"""
         raise NotImplementedError()
+    
+    async def get_all_games(self):
+        """Get all games"""
+        raise NotImplementedError()
 
     async def set_game_owner(self, ownerid):
         """Change the owner of a game"""
@@ -95,134 +99,130 @@ class Postgres(RelationalDataBase):
                 for sql in filter(methodcaller("strip"), sqlfile.read().split(";")):
                     status = await self.conn.execute(sql)
                     logger.debug("%s", status)
+    
+    async def create_user(self, userid, name, email, hashed_password):
+        query = await self.conn.prepare("SELECT create_user($1, $2, $3, $4)")
+        await query.fetch(userid, name, email, hashed_password)
 
-    async def prepare(self):
-        """Cache all SQL available functions"""
+    async def get_user_by_login(self, login):
+        query = await self.conn.prepare("SELECT * FROM get_user_by_login($1)")
+        user = await query.fetchrow(login)
+        if user["userid"] is None:
+            raise NotFoundError()
+        return User(**dict(user.items()))
 
-        functions = [
-            ("create_user", 4, None, 0),
-            ("get_user_by_id", 1, User, 1),
-            ("get_user_by_login", 1, User, 1),
-            ("set_user_admin", 2, None, 0),
-            ("set_user_verified", 2, None, 0),
-            ("create_game", 3, AutoIncr, 1),
-            ("get_all_games", 0, Game, 2),
-            ("get_game_by_id", 1, Game, 1),
-            ("get_game_by_name", 1, Game, 1),
-            ("get_games_by_owner", 1, Game, 2),
-            ("set_game_owner", 2, None, 0)
-        ]
+    async def get_user_by_id(self, id_):
+        query = await self.conn.prepare("SELECT * FROM get_user_by_id($1)")
+        user = await query.fetchrow(id_)
+        if user["userid"] is None:
+            raise NotFoundError()
+        return User(**dict(user.items()))
 
-        async def wrap(name, argscnt, class_, resultcnt):
-            """Create the prepated statement"""
-            if argscnt:
-                sqlargs = ", $".join(map(str, range(1, argscnt + 1)))
-                query = await self.conn.prepare("SELECT * FROM %s($%s)" % (name, sqlargs))
-            else:
-                query = await self.conn.prepare("SELECT * FROM %s()" % name)
+    async def set_user_admin(self, userid, value):
+        query = await self.conn.prepare("SELECT set_user_admin($1, $2)")
+        await query.fetch(userid, value)
 
-            if resultcnt == 0:
-                async def wrapped_none(*args):
-                    await query.fetchrow(*args)
-                return wrapped_none
+    async def set_user_verified(self, userid, value):
+        query = await self.conn.prepare("SELECT set_user_verified($1, $2)")
+        await query.fetch(userid, value)
 
-            elif resultcnt == 1:
-                async def wrapped_one(*args):
-                    row = await query.fetchval(*args)
-                    logger.debug(row)
-                    if not row:
-                        raise NotFoundError()
-                    if isinstance(row, Record):
-                        return class_(**dict(row.items()))
-                    elif isinstance(row, tuple):
-                        return class_(*row)
-                    else:
-                        try:
-                            class_(row)
-                        except Exception as exc:
-                            err = "{} (type: {}) is not either {}".format(
-                                row, type(row),
-                                " or ".join(map(str, [tuple, Record]))) 
-                            raise TypeError(err) from exc
-                return wrapped_one
-            
-            else:
-                async def wrapped_many(*args):
-                    result = await query.fetch(*args)
-                    if not result:
-                        return []
-                    logger.debug(result)
-                    rows = [result] if isinstance(result, (Record, tuple)) else result
-                    if isinstance(rows[0], Record): 
-                        return map(lambda row: class_(**dict(row.items())), rows)
-                    elif isinstance(rows[0], tuple):
-                        return map(lambda row: class_(*row), rows)
-                    else:
-                        try:
-                            [class_(result)]
-                        except Exception as exc:
-                            err = "{} (type: {}) is not either {}".format(
-                                result[name], type(result[name]),
-                                " or ".join(map(str, [tuple, Record]))) 
-                            raise TypeError(err) from exc
-                return wrapped_many
+    async def create_game(self, name, ownerid, capacity):
+        query = await self.conn.prepare("SELECT create_game($1, $2, $3)")
+        gameid = await query.fetchrow(name, ownerid, capacity)[0]
+        return gameid
 
-        for name, args_count, class_, result_count in functions:
-            setattr(self, name, await wrap(name, args_count, class_, result_count))
+    async def get_game_by_id(self, id_):
+        query = await self.conn.prepare("SELECT * FROM get_game_by_id($1)")
+        game = await query.fetchrow(id_)
+        if game["gameid"] is None:
+            raise NotFoundError()
+        return Game(**dict(game.items()))
+    
+    async def get_all_games(self):
+        query = await self.conn.prepare("SELECT * FROM get_all_games()")
+        games = await query.fetch()
+
+        return map(lambda game: Game(**dict(game.items())), games)
+
+    async def get_game_by_name(self, name):
+        query = await self.conn.prepare("SELECT * FROM get_game_by_name($1)")
+        game = await query.fetchrow(name)
+        if game["gameid"] is None:
+            raise NotFoundError()
+        return Game(**dict(game.items()))
 
 
 class SQLite(RelationalDataBase):
     """Implementation database-free"""
     def __init__(self):
         self.conn = sqlite3_connect(":memory:")
-        sqldir = Path(root()).joinpath("storage", "sql_queries", "sqlite")
-
-        def wrap(sql, class_, resultcnt):
-            @fake_async
-            def wrapped(*args):
-                args = list(args)
-                for i in range(len(args)):
-                    if isinstance(args[i], UUID):
-                        args[i] = str(args[i])
-                if resultcnt == 0:
-                    self.conn.cursor().execute(sql, args)
-                elif resultcnt == 1:
-                    row = self.conn.cursor().execute(sql, args).fetchone()
-                    if class_ is AutoIncr:
-                        query = "SELECT last_insert_rowid()"
-                        return self.conn.cursor().execute(query).fetchone()[0]
-                    if row is None:
-                        raise NotFoundError()
-                    return class_(*row)
-                else:
-                    rows = self.conn.cursor().execute(sql, args).fetchall()
-                    return map(class_, rows)
-            return wrapped
+        self.sqldir = Path(root()).joinpath("storage", "sql_queries", "sqlite")
 
         create_tables = [
             "create_table_users",
             "create_table_games"]
         for table in create_tables:
-            with sqldir.joinpath("%s.sql" % table).open() as sqlfile:
+            with self.sqldir.joinpath("%s.sql" % table).open() as sqlfile:
                 self.conn.cursor().execute(sqlfile.read())
 
-        functions = [
-            ("create_user", None, 0),
-            ("get_user_by_id", User, 1),
-            ("get_user_by_login", User, 1),
-            ("set_user_admin", None, 0),
-            ("set_user_verified", None, 0),
-            ("create_game", AutoIncr, 1),
-            ("get_all_games", Game, 2),
-            ("get_game_by_id", Game, 1),
-            ("get_game_by_name", Game, 1),
-            ("get_games_by_owner", Game, 2),
-            ("set_game_owner", None, 0)
-        ]
+    async def create_user(self, userid, name, email, hashed_password):
+        with self.sqldir.joinpath("create_user.sql").open() as sqlfile:
+            self.conn.cursor().execute(sqlfile.read(),
+                [str(userid), name, email, hashed_password])
 
-        for function, class_, result_count in functions:
-            with sqldir.joinpath("%s.sql" % function).open() as sqlfile:
-                setattr(self, function, wrap(sqlfile.read(), class_, result_count))
+    async def get_user_by_login(self, login):
+        with self.sqldir.joinpath("get_user_by_login.sql").open() as sqlfile:
+            query = self.conn.cursor().execute(sqlfile.read(), [login])
+            user = query.fetchone()
+            if user is None:
+                raise NotFoundError()
+            return User(*user)
+
+    async def get_user_by_id(self, id_):
+        with self.sqldir.joinpath("get_user_by_id.sql").open() as sqlfile:
+            query = self.conn.cursor().execute(sqlfile.read(), [id_])
+            user = query.fetchone()
+            if user is None:
+                raise NotFoundError()
+            return User(*user)
+
+    async def set_user_admin(self, userid, value):
+        with self.sqldir.joinpath("set_user_admin.sql").open() as sqlfile:
+            self.conn.cursor().execute(sqlfile.read(), [str(userid), value])
+
+    async def set_user_verified(self, userid, value):
+        with self.sqldir.joinpath("set_user_verified.sql").open() as sqlfile:
+            self.conn.cursor().execute(sqlfile.read(), [str(userid), value])
+
+    async def create_game(self, name, ownerid, capacity):
+        with self.sqldir.joinpath("create_game.sql").open() as sqlfile:
+            self.conn.cursor().execute(sqlfile.read(),
+                [name, str(ownerid), capacity])
+    
+        query = "SELECT last_insert_rowid()"
+        return self.conn.cursor().execute(query).fetchone()[0] 
+
+    async def get_game_by_id(self, id_):
+        with self.sqldir.joinpath("get_game_by_id.sql").open() as sqlfile:
+            query = self.conn.cursor().execute(sqlfile.read(), [id_])
+            game = query.fetchone()
+            if game is None:
+                raise NotFoundError()
+            return Game(*game)
+
+    async def get_game_by_name(self, name):
+        with self.sqldir.joinpath("get_game_by_name.sql").open() as sqlfile:
+            query = self.conn.cursor().execute(sqlfile.read(), [name])
+            game = query.fetchone()
+            if game is None:
+                raise NotFoundError()
+            return Game(*game)
+    
+    async def get_all_games(self):
+        with self.sqldir.joinpath("get_all_games.sql").open() as sqlfile:
+            query = self.conn.cursor().execute(sqlfile.read())
+            games = query.fetchall()
+            return map(lambda game: Game(*game), games)
 
 
 class KeyValueStore():
@@ -636,7 +636,10 @@ class InMemory(KeyValueStore):
         user.ready = False
         if self.groups[user.groupid].state == State.IN_QUEUE:
             await self.leave_queue(user.groupid)
-            
+    
+    @fake_async
+    def is_user_ready(self, userid):
+        return self.users[userid].ready
 
     @fake_async
     def leave_group(self, userid):
@@ -654,7 +657,7 @@ class InMemory(KeyValueStore):
         del self.users[userid]
         group.members.remove(userid)
         if not group.members:
-            del self.groups[groupid]
+            del self.groups[user.groupid]
     
     @fake_async
     def get_user(self, userid):
