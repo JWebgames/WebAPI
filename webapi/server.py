@@ -4,6 +4,7 @@ import logging
 from uuid import uuid4
 import aioredis
 import asyncpg
+from aiohttp import ClientSession
 from sanic import Sanic
 from sanic.response import text
 import scrypt
@@ -18,6 +19,7 @@ from .routes.groups import bp as groupsbp
 from .routes.msgqueues import bp as msgqueuesbp, close_all_connections
 
 logger = logging.getLogger(__name__)
+http_client = None
 
 async def connect_to_postgres(_app, loop):
     """Connect to postgres and expose the connection object"""
@@ -68,6 +70,15 @@ async def disconnect_from_redis(_app, _loop):
     await drivers.KVS.redis.wait_closed()
     logger.info("Disconnected from redis")
 
+@app.listener("before_server_start")
+async def start_http_client(_app, loop):
+    global http_client
+    http_client = ClientSession(loop=loop)
+
+@app.listener("after_server_stop")
+async def stop_http_client(_app, _loop):
+    await http_client.close()
+
 
 # Register remote or local databases
 if config.webapi.PRODUCTION:
@@ -82,12 +93,14 @@ else:
     drivers.KVS = drivers.InMemory()
 
     # Feed database with some data
-    toto_id = uuid4()
-    lruc(drivers.RDB.create_user(
-        toto_id, "toto", "toto@example.com",
-        scrypt.encrypt(b"salt", "password", maxtime=0.01)))
-    lruc(drivers.RDB.set_user_admin(toto_id, True))
+    for toto in ["toto1", "toto2", "admin"]:
+        toto_id = uuid4()
+        lruc(drivers.RDB.create_user(
+            toto_id, toto, "%s@example.com" % toto,
+            scrypt.encrypt(b"salt", "password", maxtime=0.01)))
+        lruc(drivers.RDB.set_user_admin(toto_id, True))
     lruc(drivers.RDB.create_game("bomberman", toto_id, 4))
+    lruc(drivers.RDB.create_game("stupid-game", toto_id, 4))
 
 # Register others functions
 app.listener("before_server_stop")(close_all_connections)

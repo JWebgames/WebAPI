@@ -50,6 +50,7 @@ class WebAPIConfig(NamedTuple):
     SSL_CERT_PATH: Optional[str] = None
     SSL_KEY_PATH: Optional[str] = None
     SSL_KEY_PASS: Optional[str] = None
+    GROUP_URL: str = "http://localhost:22548/v1/groups"
 
 
 postgres: "PostgresConfig"

@@ -22,3 +22,4 @@ webapi:
   SSL_CERT_PATH: null
   SSL_KEY_PATH: null
   SSL_KEY_PASS: null
+  GROUP_URL: http://localhost:22548/v1/groups
