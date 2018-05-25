@@ -180,7 +180,7 @@ class SQLite(RelationalDataBase):
 
     async def get_user_by_id(self, id_):
         with self.sqldir.joinpath("get_user_by_id.sql").open() as sqlfile:
-            query = self.conn.cursor().execute(sqlfile.read(), [id_])
+            query = self.conn.cursor().execute(sqlfile.read(), [str(id_)])
             user = query.fetchone()
             if user is None:
                 raise NotFoundError()
@@ -204,7 +204,7 @@ class SQLite(RelationalDataBase):
 
     async def get_game_by_id(self, id_):
         with self.sqldir.joinpath("get_game_by_id.sql").open() as sqlfile:
-            query = self.conn.cursor().execute(sqlfile.read(), [id_])
+            query = self.conn.cursor().execute(sqlfile.read(), [str(id_)])
             game = query.fetchone()
             if game is None:
                 raise NotFoundError()
@@ -731,8 +731,12 @@ class InMemory(KeyValueStore):
         group.state = State.GROUP_CHECK
 
     async def send_message(self, queue, id_, payload):
+        if isinstance(id_, UUID):
+            id_ = str(id_)
         await self.msgqueues[queue][id_].put(json_dumps(payload).encode())
 
     async def recv_messages(self, queue, id_):
+        if isinstance(id_, UUID):
+            id_ = str(id_)
         while True:
             yield await self.msgqueues[queue][id_].get()

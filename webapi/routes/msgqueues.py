@@ -6,7 +6,6 @@ from collections import defaultdict
 from sanic import Blueprint
 from sanic.response import stream
 from sanic.exceptions import InvalidUsage
-from ..server import app
 from ..exceptions import PlayerNotInParty, PlayerNotInGroup
 from ..middlewares import authenticate, require_fields
 from ..storage import drivers
@@ -32,18 +31,18 @@ async def heartbeat(res, stop_event):
 
 
 async def sub_proxy(res, stop_event, queue, id_):
-    logger.info("New subscribtion to queue %s:%s", queue, id_)
+    logger.info("New subscribtion to queue %s:%s", queue.value, id_)
     with suppress(asyncio.CancelledError):
-        for msg in drivers.KVS.recv_messages(queue, id_):
+        async for msg in drivers.KVS.recv_messages(queue, id_):
             if res.transport.is_closing():
                 logger.debug("Transport %s closed", res.transport)
                 stop_event.set()
                 break
             logger.debug("Send message %s from queue %s:%s to %s",
-                         msg, queue, id_, res)
+                        msg, queue.value, id_, res)
             res.write(msg)
             res.write(chr(30))  # ascii unit separator
-    logger.info("Subscribtion to queue %s:%s over", queue, id_)
+    logger.info("Subscribtion to queue %s:%s over", queue.value, id_)
 
 
 async def stream_until_event_is_set(res, stream_func):
@@ -80,7 +79,7 @@ async def get_group_msg(req, jwt):
     if user.groupid is None:
         raise PlayerNotInGroup()
 
-    greetings(MsgQueueType.GROUP, user.partyid)
+    greetings(MsgQueueType.GROUP, user.groupid)
     return stream(async_partial(stream_until_event_is_set,
         stream_func=async_partial(sub_proxy,
             queue=MsgQueueType.GROUP, id_=user.groupid)))
@@ -99,7 +98,7 @@ async def get_party_msg(req, jwt):
 
 def greetings(queue, id_):
     payload = {"type": "server:notice",
-               "notice": "hello to {!s} on {!s}".format(id_, queue)}
+               "notice": "subed to {}:{!s}".format(queue.value, id_)}
     coro = drivers.KVS.send_message(queue, id_, payload)
     asyncio.get_event_loop().call_later(0.2, asyncio.ensure_future, coro)
 

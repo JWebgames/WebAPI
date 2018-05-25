@@ -1,4 +1,5 @@
 from logging import getLogger
+from uuid import UUID
 from sanic import Blueprint
 from sanic.response import json, text
 from sanic.exceptions import NotFound
@@ -37,9 +38,19 @@ async def create(req, gameid, jwt):
     return json({"groupid": str(groupid)})
 
 
-@bp.route("/invite/<userid>", methods=["POST"])
+@bp.route("/invite/byid/<userid>", methods=["POST"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
-async def invite(req, userid, jwt):
+async def invite_id(req, userid, jwt):
+    return await invite(userid, jwt)
+
+
+@bp.route("/invite/byname/<user>", methods=["POST"])
+@authenticate({ClientType.PLAYER, ClientType.ADMIN})
+async def invite_name(req, user, jwt):
+    user = await drivers.RDB.get_user_by_login(user)
+    return await invite(user.userid, jwt)
+
+async def invite(userid, jwt):
     user = await drivers.KVS.get_user(jwt["uid"])
     group = await drivers.KVS.get_group(user.groupid)
     game = await drivers.RDB.get_game_by_id(group.gameid)
@@ -60,7 +71,7 @@ async def invite(req, userid, jwt):
 @bp.route("/join/<groupid>", methods=["POST"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
 async def join(req, groupid, jwt):
-    await drivers.KVS.join_group(groupid, jwt["uid"])
+    await drivers.KVS.join_group(UUID(groupid), jwt["uid"])
 
     user = await drivers.KVS.get_user(jwt["uid"])
     payload = {"type": "group:user joined",
@@ -86,6 +97,23 @@ async def leave(req, jwt):
     await drivers.KVS.send_message(MsgQueueType.GROUP, user.groupid, payload)
     return text("", status=204)
 
+@bp.route("/kick/<userid>", methods=["DELETE"])
+@authenticate({ClientType.ADMIN})
+async def kick(req, userid, jwt):
+    try:
+        user = await drivers.KVS.get_user(userid)
+    except PlayerNotInGroup as exc:
+        raise NotFound("User not in group") from exc
+
+    await drivers.KVS.leave_group(userid)
+
+    payload = {"type": "group:user left",
+               "user": {
+                   "userid": jwt["uid"],
+                   "username": jwt.get("nic")
+               }}
+    await drivers.KVS.send_message(MsgQueueType.GROUP, user.groupid, payload)
+    return text("", status=204)
 
 @bp.route("/ready", methods=["POST"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
