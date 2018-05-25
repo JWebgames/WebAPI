@@ -128,8 +128,8 @@ class Postgres(RelationalDataBase):
 
     async def create_game(self, name, ownerid, capacity):
         query = await self.conn.prepare("SELECT create_game($1, $2, $3)")
-        gameid = await query.fetchrow(name, ownerid, capacity)[0]
-        return gameid
+        gameid = await query.fetchrow(name, ownerid, capacity)
+        return gameid[0]
 
     async def get_game_by_id(self, id_):
         query = await self.conn.prepare("SELECT * FROM get_game_by_id($1)")
