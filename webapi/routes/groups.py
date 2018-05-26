@@ -1,12 +1,16 @@
+from contextlib import suppress
 from logging import getLogger
 from uuid import UUID
 from sanic import Blueprint
 from sanic.response import json, text
-from sanic.exceptions import NotFound
+from sanic.exceptions import NotFound, InvalidUsage
+from .. import config
+from .. import server
+from ..tools import generate_token
 from ..middlewares import authenticate, require_fields
 from ..storage import drivers 
 from ..storage.models import ClientType, MsgQueueType
-from ..exceptions import PlayerNotInGroup
+from ..exceptions import PlayerNotInGroup, GroupNotReady, WrongGroupState
 from json import loads as json_loads
 
 bp = Blueprint("groups")
@@ -28,7 +32,6 @@ async def group_state(req, jwt):
          "ready": await drivers.KVS.is_user_ready(userid),
          "id": userid} for userid in jsonbody["members"]]
     del jsonbody["ready"]
-    logger.warning(jsonbody)
     return json(jsonbody)
 
 
@@ -87,31 +90,32 @@ async def join(req, groupid, jwt):
 @bp.route("/leave", methods=["DELETE"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
 async def leave(req, jwt):
-    user = await drivers.KVS.get_user(jwt["uid"])
-    await drivers.KVS.leave_group(jwt["uid"])
-
-    payload = {"type": "group:user left",
-               "user": {
-                   "userid": jwt["uid"],
-                   "username": jwt.get("nic")
-               }}
-    await drivers.MSG.send_message(MsgQueueType.GROUP, user.groupid, payload)
-    return text("", status=204)
+    return await do_leave(jwt["uid"], jwt["nic"])
 
 @bp.route("/kick/<userid>", methods=["DELETE"])
 @authenticate({ClientType.ADMIN})
 async def kick(req, userid, jwt):
-    try:
-        user = await drivers.KVS.get_user(userid)
-    except PlayerNotInGroup as exc:
-        raise NotFound("User not in group") from exc
+    return await do_leave(userid, None)
 
+async def do_leave(userid, username):
+    user = await drivers.KVS.get_user(userid)
     await drivers.KVS.leave_group(userid)
+
+    # Kick user from group stream
+    url = "{}/kick/{}/from/{}".format(
+        config.webapi.MSQQUEUES_URL, userid, MsgQueueType.GROUP.value)
+    headers = {"Authorization": "Bearer: %s" % \
+               generate_token(config.webapi.JWT_SECRET,
+                              typ=ClientType.ADMIN.value)}
+    async with server.http_client.delete(url, headers=headers) as res:
+        if res.status != 204:
+            logger.error("Error calling url %s: %s %s",
+                        url, res.status, res.reason)
 
     payload = {"type": "group:user left",
                "user": {
-                   "userid": jwt["uid"],
-                   "username": jwt.get("nic")
+                   "userid": userid,
+                   "username": username
                }}
     await drivers.MSG.send_message(MsgQueueType.GROUP, user.groupid, payload)
     return text("", status=204)
@@ -150,7 +154,10 @@ async def notready(req, jwt):
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
 async def start(req, jwt):
     user = await drivers.KVS.get_user(jwt["uid"])
-    await drivers.KVS.join_queue(user.groupid)
+    try:
+        await drivers.KVS.join_queue(user.groupid)
+    except GroupNotReady as exc:
+        raise InvalidUsage("The group is not ready yet") from exc
 
     payload = {"type":"group:queue joined"}
     await drivers.MSG.send_message(MsgQueueType.GROUP, user.groupid, payload)

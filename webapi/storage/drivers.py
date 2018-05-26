@@ -444,19 +444,13 @@ class Redis(KeyValueStore):
             await self.leave_queue(groupid)
         
         await self.redis.set(Redis.user_ready_key.format(userid), b"0")
-    
-    async def is_user_ready(self, userid):
-        ready = self.redis.get(Redis.user_ready_key.format(userid))
-        if ready is None:
-            raise PlayerNotInGroup()
-        return ready == b"1"
 
-    async def is_ready(self, userid):
+    async def is_user_ready(self, userid):
         return (await self.redis.get(Redis.user_ready_key.format(userid))) == b"1"
     
     async def is_group_ready(self, groupid):
         return all(await gather(*[
-            self.is_ready(userid.decode()) for userid in 
+            self.is_user_ready(userid.decode()) for userid in 
             await self.redis.smembers(Redis.group_members_key.format(groupid))]))
 
 
@@ -470,10 +464,9 @@ class Redis(KeyValueStore):
         state = State(await self.redis.get(group_state_key))
         if state != State.GROUP_CHECK:
             raise WrongGroupState(state, State.GROUP_CHECK)
-        await self.redis.set(group_state_key, State.IN_QUEUE.value)
-
         if not (await self.is_group_ready(groupid)):
             raise GroupNotReady()
+        await self.redis.set(group_state_key, State.IN_QUEUE.value)
 
         game = await RDB.get_game_by_id(gameid)
         group_members_key = Redis.group_members_key.format(groupid)

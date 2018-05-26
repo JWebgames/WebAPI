@@ -45,7 +45,8 @@ def safe_webapi(request, exception):
     return HTTP 400 'BadRequest' status code with the error
     contained in the 'error' field.
     """
-    logger.debug(str(exception), exc_info=True)
+    logger.log(45, "Impossible action on normal use (IP: %s)",
+                   request.ip, exc_info=True)
     return json({"error": str(exception)}, 400)
 
 

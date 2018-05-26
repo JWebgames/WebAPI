@@ -51,6 +51,7 @@ class WebAPIConfig(NamedTuple):
     SSL_KEY_PATH: Optional[str] = None
     SSL_KEY_PASS: Optional[str] = None
     GROUP_URL: str = "http://localhost:22548/v1/groups"
+    MSQQUEUES_URL: str = "http://localhost:22548/v1/msgqueues"
     PULL_ADDRESS: str = "tcp://127.0.0.1:22549"
     PUB_ADDRESS: str = "tcp://127.0.0.1:22550"
 

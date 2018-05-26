@@ -45,6 +45,14 @@ def raise_sql_error(_req):
     raise IntegrityError(ERROR_MESSAGE_2)
 
 
+@app.route("/tests/disco", methods=["DELETE"])
+@authenticate({ClientType.PLAYER, ClientType.ADMIN})
+@coroutine
+def require_auth(_req, jwt):
+    """Return an empty json, require authentication"""
+    yield from drivers.KVS.revoke_token(jwt)
+    return json({})
+
 @app.route("/tests/auth")
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
 @coroutine
@@ -162,13 +170,13 @@ class TestAuthenticate(TestCase):
         """Fail if the token is revoked"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            _, res_logout = app.test_client.delete("/v1/auth/", headers={
+            _, res_logout = app.test_client.delete("/tests/disco", headers={
                 "Authorization": "Bearer: %s" % REVOKED_JWT
             })
             _, res_auth = app.test_client.get("/tests/auth", headers={
                 "Authorization": "Bearer: %s" % REVOKED_JWT
             })
-        self.assertEqual(res_logout.status, 204)
+        self.assertEqual(res_logout.status, 200)
         self.assertEqual(res_auth.status, 403)
         self.assertEqual(res_auth.json["error"], "Revoked token")
 

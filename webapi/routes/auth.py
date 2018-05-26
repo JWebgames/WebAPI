@@ -7,7 +7,6 @@ from uuid import uuid4
 from secrets import token_bytes
 import jwt as jwtlib
 import scrypt
-from aiohttp.client_exceptions import ClientConnectorError
 from pytimeparse import parse as timeparse
 from sanic import Blueprint
 from sanic.exceptions import Forbidden, NotFound
@@ -71,10 +70,9 @@ async def logout(req, jwt):
     headers = {"Authorization": "Bearer: %s" % \
                generate_token(config.webapi.JWT_SECRET,
                               typ=ClientType.ADMIN.value)}
-    with suppress(ClientConnectorError):
-        async with server.http_client.delete(url, headers=headers) as res:
-            if res.status not in [204, 404]:
-                logger.error("Error calling url %s: %s %s",
-                            url, res.status, res.reason)
+    async with server.http_client.delete(url, headers=headers) as res:
+        if res.status not in [204, 404]:
+            logger.error("Error calling url %s: %s %s",
+                        url, res.status, res.reason)
     logger.info("User disconnected: %s", jwt["jti"])
     return text("", status=204)
