@@ -32,16 +32,23 @@ async def heartbeat(res, stop_event):
 
 async def sub_proxy(res, stop_event, queue, id_):
     logger.info("New subscribtion to queue %s:%s", queue.value, id_)
-    with suppress(asyncio.CancelledError):
-        async for msg in drivers.KVS.recv_messages(queue, id_):
+    reciever = drivers.MSG.recv_messages(queue, id_)
+    async for sentinel in reciever: break  # sentinel = next(reciever)
+    try:
+        async for msg in reciever:
             if res.transport.is_closing():
                 logger.debug("Transport %s closed", res.transport)
                 stop_event.set()
-                break
+                await reciever.asend(sentinel)
+                continue
             logger.debug("Send message %s from queue %s:%s to %s",
                         msg, queue.value, id_, res)
             res.write(msg)
             res.write(chr(30))  # ascii unit separator
+    except asyncio.CancelledError:
+        pass
+    finally:
+        reciever.send(sentinel)
     logger.info("Subscribtion to queue %s:%s over", queue.value, id_)
 
 

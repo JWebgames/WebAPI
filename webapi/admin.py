@@ -21,8 +21,6 @@ def wizard():
 
         if ask_bool("Initialize the database ?"):
             loop.run_until_complete(drivers.RDB.install())
-        
-        loop.run_until_complete(drivers.RDB.prepare())
 
         if ask_bool("Create a user ?"):
             userid = uuid4()

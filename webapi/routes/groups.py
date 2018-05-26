@@ -28,6 +28,7 @@ async def group_state(req, jwt):
          "ready": await drivers.KVS.is_user_ready(userid),
          "id": userid} for userid in jsonbody["members"]]
     del jsonbody["ready"]
+    logger.warning(jsonbody)
     return json(jsonbody)
 
 
@@ -64,7 +65,7 @@ async def invite(userid, jwt):
                    "gameid": str(game.gameid),
                    "gamename": game.name
                }}
-    await drivers.KVS.send_message(MsgQueueType.USER, userid, payload)
+    await drivers.MSG.send_message(MsgQueueType.USER, userid, payload)
     return text("", status=204)
 
 
@@ -79,7 +80,7 @@ async def join(req, groupid, jwt):
                    "userid": jwt["uid"],
                    "username": jwt.get("nic")
                }}
-    await drivers.KVS.send_message(MsgQueueType.GROUP, user.groupid, payload)
+    await drivers.MSG.send_message(MsgQueueType.GROUP, user.groupid, payload)
     return text("", status=204)
 
 
@@ -94,7 +95,7 @@ async def leave(req, jwt):
                    "userid": jwt["uid"],
                    "username": jwt.get("nic")
                }}
-    await drivers.KVS.send_message(MsgQueueType.GROUP, user.groupid, payload)
+    await drivers.MSG.send_message(MsgQueueType.GROUP, user.groupid, payload)
     return text("", status=204)
 
 @bp.route("/kick/<userid>", methods=["DELETE"])
@@ -112,7 +113,7 @@ async def kick(req, userid, jwt):
                    "userid": jwt["uid"],
                    "username": jwt.get("nic")
                }}
-    await drivers.KVS.send_message(MsgQueueType.GROUP, user.groupid, payload)
+    await drivers.MSG.send_message(MsgQueueType.GROUP, user.groupid, payload)
     return text("", status=204)
 
 @bp.route("/ready", methods=["POST"])
@@ -126,7 +127,7 @@ async def ready(req, jwt):
                    "userid": jwt["uid"],
                    "username": jwt.get("nic")
                }}
-    await drivers.KVS.send_message(MsgQueueType.GROUP, user.groupid, payload)
+    await drivers.MSG.send_message(MsgQueueType.GROUP, user.groupid, payload)
     return text("", status=204)
 
 
@@ -141,7 +142,7 @@ async def notready(req, jwt):
                    "userid": jwt["uid"],
                    "username": jwt.get("nic")
                }}
-    await drivers.KVS.send_message(MsgQueueType.GROUP, user.groupid, payload)
+    await drivers.MSG.send_message(MsgQueueType.GROUP, user.groupid, payload)
     return text("", status=204)
 
 
@@ -152,5 +153,5 @@ async def start(req, jwt):
     await drivers.KVS.join_queue(user.groupid)
 
     payload = {"type":"group:queue joined"}
-    await drivers.KVS.send_message(MsgQueueType.GROUP, user.groupid, payload)
+    await drivers.MSG.send_message(MsgQueueType.GROUP, user.groupid, payload)
     return text("", status=204)

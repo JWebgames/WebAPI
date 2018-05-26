@@ -4,14 +4,14 @@ import logging
 from uuid import uuid4
 import aioredis
 import asyncpg
+import scrypt
 from aiohttp import ClientSession
 from sanic import Sanic
 from sanic.response import text
-import scrypt
-from .tools import lruc
 
 app = Sanic(__name__, configure_logging=False)
 from . import config
+from .tools import lruc
 from .storage import drivers
 from .routes.auth import bp as authbp
 from .routes.games import bp as gamesbp
@@ -55,6 +55,12 @@ async def connect_to_redis(_app, loop):
     drivers.KVS = drivers.Redis(redispool)
     logger.info("Connection to redis established.")
 
+@app.listener("before_server_start")
+async def connect_to_messager(_app, _loop):
+    logger.info("Connecting to messager...")
+    drivers.MSG = drivers.Messager()
+    logger.info("Connection to messager established.")
+
 
 async def disconnect_from_postgres(_app, _loop):
     """Safely disconnect from postgres"""
@@ -69,6 +75,12 @@ async def disconnect_from_redis(_app, _loop):
     drivers.KVS.redis.close()
     await drivers.KVS.redis.wait_closed()
     logger.info("Disconnected from redis")
+
+@app.listener("after_server_stop")
+async def disconnect_from_messager(_app, _loop):
+    logger.info("Disconnecting from manager...")
+    drivers.MSG.close()
+    logger.info("Disconnected from manager")
 
 @app.listener("before_server_start")
 async def start_http_client(_app, loop):

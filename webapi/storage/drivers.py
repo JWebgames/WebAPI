@@ -10,11 +10,14 @@ from os import listdir
 from os.path import join as pathjoin
 from pathlib import Path
 from time import time
+from sqlite3 import connect as sqlite3_connect
+import zmq
+import zmq.asyncio
 from aioredis import Redis as AIORedis
 from asyncpg import Record
-from sqlite3 import connect as sqlite3_connect
 from .models import User, Game, State, MsgQueueType, \
                     Group, UserKVS, Slot, Message
+from .. import config
 from ..tools import root, fake_async
 from webapi.exceptions import PlayerInGroupAlready, \
                               PlayerNotInGroup, \
@@ -33,6 +36,7 @@ AutoIncr = NewType("AutoIncr", int)
 
 RDB: "RelationalDataBase"
 KVS: "KeyValueStore"
+MSG: "Messager"
 
 
 class RelationalDataBase():
@@ -276,12 +280,6 @@ class KeyValueStore():
         raise NotImplementedError()
     
     async def create_party(self, groupid):
-        raise NotImplementedError()
-    
-    async def send_message(self, queue_group, queue_target, id_, payload):
-        raise NotImplementedError()
-
-    async def recv_messages(self, queue, id_):
         raise NotImplementedError()
 
 
@@ -530,17 +528,6 @@ class Redis(KeyValueStore):
         if (await self.redis.scard(slot_players_key)) == 0:
             self.redis.lrem(Redis.game_queue_key.format(gameid), 1, slotid)
         await self.redis.set(group_state_key, State.GROUP_CHECK.value)
-    
-    async def send_message(self, queue, id_, payload):
-        await self.redis.publish(
-            Redis.msgqueue_key.format(queue.value, id_),
-            json_dumps(payload).encode("utf-8"))
-
-    async def recv_messages(self, queue, id_):
-        key = Redis.msgqueue_key.format(queue.value, id_)
-        chan = (await self.redis.subscribe(key))[0]
-        while await chan.wait_message():
-            yield await chan.get(encoding="utf-8")
 
 
 class InMemory(KeyValueStore):
@@ -730,13 +717,43 @@ class InMemory(KeyValueStore):
         group.slotid = None
         group.state = State.GROUP_CHECK
 
+
+class Messager:
+    """Send and recieve message over ZeroMQ"""
+
+    def __init__(self):
+        self.context = zmq.asyncio.Context()
+        self.pusher = self.context.socket(zmq.PUSH)
+        self.pusher.connect(config.webapi.PULL_ADDRESS)
+        logger.debug("Connected to messager puller running on %s",
+                     config.webapi.PULL_ADDRESS)
+
     async def send_message(self, queue, id_, payload):
-        if isinstance(id_, UUID):
-            id_ = str(id_)
-        await self.msgqueues[queue][id_].put(json_dumps(payload).encode())
+        """PUSH a message to be PUB by the Messager"""
+        await self.pusher.send_string(
+            "{}:{!s} {}".format(queue.value, id_, json_dumps(payload)))
 
     async def recv_messages(self, queue, id_):
-        if isinstance(id_, UUID):
-            id_ = str(id_)
+        """SUB to messages PUB by th Message"""
+        sub_pattern = "{}:{!s}".format(queue.value, id_)
+        suber = self.context.socket(zmq.SUB)
+        suber.connect(config.webapi.PUB_ADDRESS)
+        logger.debug("Connected to messager publisher running on %s",
+                     config.webapi.PUB_ADDRESS)
+        suber.setsockopt_string(zmq.SUBSCRIBE, sub_pattern)
+        logger.debug("Recieving message for pattern %s",
+                     sub_pattern)
+        
+        sentinel = object()
+        yield sentinel
         while True:
-            yield await self.msgqueues[queue][id_].get()
+            if ((yield (await suber.recv_string())[len(sub_pattern) + 1:])
+                is sentinel):
+                break
+        yield
+        logger.debug("Stop recieving message for pattern %s "
+                     "and closing connection", sub_pattern)
+        suber.close()
+    
+    def close(self):
+        self.pusher.close()
