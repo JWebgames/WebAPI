@@ -6,6 +6,7 @@ import aioredis
 import asyncpg
 import scrypt
 from aiohttp import ClientSession
+from aiodocker import Docker
 from sanic import Sanic
 from sanic.response import text
 
@@ -55,11 +56,19 @@ async def connect_to_redis(_app, loop):
     drivers.KVS = drivers.Redis(redispool)
     logger.info("Connection to redis established.")
 
+
 @app.listener("before_server_start")
 async def connect_to_messager(_app, _loop):
     logger.info("Connecting to messager...")
     drivers.MSG = drivers.Messager()
     logger.info("Connection to messager established.")
+
+
+@app.listener("before_server_start")
+async def start_http_and_docker_client(_app, loop):
+    global http_client
+    http_client = ClientSession(loop=loop)
+    drivers.CTR = drivers.Docker(aiodocker.Docker(session=http_client))
 
 
 async def disconnect_from_postgres(_app, _loop):
@@ -76,19 +85,17 @@ async def disconnect_from_redis(_app, _loop):
     await drivers.KVS.redis.wait_closed()
     logger.info("Disconnected from redis")
 
+
 @app.listener("after_server_stop")
 async def disconnect_from_messager(_app, _loop):
     logger.info("Disconnecting from manager...")
     drivers.MSG.close()
     logger.info("Disconnected from manager")
 
-@app.listener("before_server_start")
-async def start_http_client(_app, loop):
-    global http_client
-    http_client = ClientSession(loop=loop)
 
 @app.listener("after_server_stop")
-async def stop_http_client(_app, _loop):
+async def stop_http_and_docket_client(_app, _loop):
+    await drivers.CTR.docker.close()
     await http_client.close()
 
 
@@ -110,7 +117,7 @@ else:
         lruc(drivers.RDB.create_user(
             toto_id, toto, "%s@example.com" % toto,
             scrypt.encrypt(b"salt", "password", maxtime=0.01)))
-        lruc(drivers.RDB.set_user_admin(toto_id, True))
+    lruc(drivers.RDB.set_user_admin(toto_id, True))
     lruc(drivers.RDB.create_game("bomberman", toto_id, 4))
     lruc(drivers.RDB.create_game("stupid-game", toto_id, 4))
 

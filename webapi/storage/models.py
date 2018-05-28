@@ -74,12 +74,16 @@ class Game(jsonable):
     name: str
     ownerid: UUID
     capacity: int
+    image: str
+    port: int
 
-    def __init__(self, gameid, name, ownerid, capacity):
+    def __init__(self, gameid, name, ownerid, capacity, image, port):
         self.gameid = int(gameid)
         self.name = name
         self.ownerid = ownerid if isinstance(ownerid, UUID) else UUID(ownerid)
         self.capacity = int(capacity)
+        self.image = image
+        self.port = int(port)
 
 
 class Group(jsonable):

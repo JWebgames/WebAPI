@@ -1,7 +1,7 @@
 """Interfaces and implementation of databases drivers"""
 
 from asyncio import ensure_future, gather, Queue
-from collections import OrderedDict, Iterable, defaultdict
+from collections import defaultdict
 from datetime import datetime, timedelta
 from json import dumps as json_dumps
 from logging import getLogger
@@ -9,34 +9,35 @@ from operator import methodcaller
 from os import listdir
 from os.path import join as pathjoin
 from pathlib import Path
-from time import time
+from random import randint
 from sqlite3 import connect as sqlite3_connect
+from time import time
+from uuid import UUID, uuid4
+
 import zmq
 import zmq.asyncio
 from aioredis import Redis as AIORedis
 from asyncpg import Record
+
 from .models import User, Game, State, MsgQueueType, \
                     Group, UserKVS, Slot, Message
 from .. import config
 from ..tools import root, fake_async
-from webapi.exceptions import PlayerInGroupAlready, \
-                              PlayerNotInGroup, \
-                              GroupDoesntExist, \
-                              GroupIsFull, \
-                              GroupNotReady, \
-                              WrongGroupState, \
-                              GameDoesntExist, \
-                              NotFoundError
-from uuid import UUID, uuid4
-from time import time
-from typing import NewType
+from ..exceptions import PlayerInGroupAlready, \
+                         PlayerNotInGroup, \
+                         GroupDoesntExist, \
+                         GroupIsFull, \
+                         GroupNotReady, \
+                         WrongGroupState, \
+                         GameDoesntExist, \
+                         NotFoundError
+
 
 logger = getLogger(__name__)
-AutoIncr = NewType("AutoIncr", int)
-
 RDB: "RelationalDataBase"
 KVS: "KeyValueStore"
 MSG: "Messager"
+CTR: "Docker"
 
 
 class RelationalDataBase():
@@ -61,7 +62,7 @@ class RelationalDataBase():
         """Set a user as admin"""
         raise NotImplementedError()
 
-    async def create_game(self, name, ownerid, capacity):
+    async def create_game(self, name, ownerid, capacity, image, port):
         """Create a game"""
         raise NotImplementedError()
 
@@ -83,10 +84,6 @@ class RelationalDataBase():
 
     async def set_game_owner(self, ownerid):
         """Change the owner of a game"""
-        raise NotImplementedError()
-
-    async def create_party(self, partyid, gamename, userids):
-        """Create a party"""
         raise NotImplementedError()
 
 
@@ -130,9 +127,9 @@ class Postgres(RelationalDataBase):
         query = await self.conn.prepare("SELECT set_user_verified($1, $2)")
         await query.fetch(userid, value)
 
-    async def create_game(self, name, ownerid, capacity):
-        query = await self.conn.prepare("SELECT create_game($1, $2, $3)")
-        gameid = await query.fetchrow(name, ownerid, capacity)
+    async def create_game(self, name, ownerid, capacity, image, port):
+        query = await self.conn.prepare("SELECT create_game($1, $2, $3, $4, $5)")
+        gameid = await query.fetchrow(name, ownerid, capacity, image, port)
         return gameid[0]
 
     async def get_game_by_id(self, id_):
@@ -198,10 +195,10 @@ class SQLite(RelationalDataBase):
         with self.sqldir.joinpath("set_user_verified.sql").open() as sqlfile:
             self.conn.cursor().execute(sqlfile.read(), [str(userid), value])
 
-    async def create_game(self, name, ownerid, capacity):
+    async def create_game(self, name, ownerid, capacity, image, port):
         with self.sqldir.joinpath("create_game.sql").open() as sqlfile:
             self.conn.cursor().execute(sqlfile.read(),
-                [name, str(ownerid), capacity])
+                [name, str(ownerid), capacity, image, port])
     
         query = "SELECT last_insert_rowid()"
         return self.conn.cursor().execute(query).fetchone()[0] 
@@ -280,6 +277,9 @@ class KeyValueStore():
         raise NotImplementedError()
     
     async def create_party(self, groupid):
+        raise NotImplementedError()
+    
+    async def create_game(self, slotit):
         raise NotImplementedError()
 
 
@@ -709,6 +709,21 @@ class InMemory(KeyValueStore):
             self.queues[group.gameid].remove(group.slotid)
         group.slotid = None
         group.state = State.GROUP_CHECK
+    
+    async def start_game(self, slotid):
+        partyid = uuid4()
+        payload = {"type": "game:starting",
+                   "partyid": str(partyid)}
+        slot = self.slots[slotid]
+        for groupid in slot.groups:
+            await MSG.send_message(MsgQueueType.GROUP, groupid, payload)
+            group = self.groups[groupid]
+            group.state = State.PLAYING
+            group.partyid = partyid
+        for userid in slot.players:
+            self.users[userid].partyid = partyid
+
+        ensure_future(CTR.create_game(gameid, partyid))
 
 
 class Messager:
@@ -750,3 +765,50 @@ class Messager:
     
     def close(self):
         self.pusher.close()
+
+class Docker:
+    def __init__(self, docker):
+        self.docker = docker
+
+    async def create_game(gameid, partyid):
+        game = await RDB.get_game_by_id(gameid)
+
+        host = "localhost"
+        port = randint(22500, 22599)
+
+        config = {
+            #"Cmd": ["-text", "hello"],
+            #"Image": "hashicorp/http-echo",
+            "Image": game.image,
+            "AttachStdin": False,
+            "AttachStdout": True,
+            "AttachStderr": True,
+            "Tty": False,
+            "OpenStdin": False,
+            "HostConfig": {
+                "PortBindings": {
+                    "{}/tcp".format(game.port): [
+                        {
+                            "HostIp": "0.0.0.0",
+                            "HostPort": str(port)
+                        }
+                    ]
+                }
+            }
+        }
+
+        logger.info("Starting %s...", game.name)
+        container = await self.docker.run(config=config)
+        
+        payload = {"type": "game:started", "host": host, "port": port}
+        await MSG.send_message(MsgQueueType.PARTY, partyid, payload)
+
+        game_logger = getLogger("game.{}.{}".format(gameid, partyid))
+        async for line in (await container.log(stdout=True, stderr=True, follow=True)):
+            game_logger.debug(line)
+        await container.wait()
+
+        payload = {"type": "game:over"}
+        await MSG.send_message(MsgQueueType.PARTY, partyid, payload)
+
+
