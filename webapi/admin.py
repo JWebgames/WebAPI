@@ -17,12 +17,10 @@ def wizard():
 
     print()
     if ask_bool("Configure postgres ?"):
-        loop.run_until_complete(connect_to_postgres(None, loop, prepare=False))
+        loop.run_until_complete(connect_to_postgres(None, loop))
 
         if ask_bool("Initialize the database ?"):
             loop.run_until_complete(drivers.RDB.install())
-        
-        loop.run_until_complete(drivers.RDB.prepare())
 
         if ask_bool("Create a user ?"):
             userid = uuid4()
@@ -52,8 +50,10 @@ def wizard():
         
         if ask_bool("Create a game ?"):
             name = input("Game name: ")
-            cap = int(input("Capacity: "))
             user = lruc(drivers.RDB.get_user_by_login(input("Owner login: ")))
+            cap = int(input("Capacity: "))
+            img = input("Image: ")
+            port = int(input("Port: "))
             if ask_bool("Process with game creation ?"):
-                lruc(drivers.RDB.create_game(name, user.userid, cap))
+                lruc(drivers.RDB.create_game(name, user.userid, cap, img, port))
                 print("Done")

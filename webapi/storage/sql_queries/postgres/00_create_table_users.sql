@@ -16,10 +16,10 @@ CREATE FUNCTION create_user(userid uuid, name varchar(24), email varchar(254), p
     VALUES (userid, name, email, password)
 $$ LANGUAGE SQL;
 
-CREATE FUNCTION get_user_by_id(userid uuid) RETURNS tbusers AS $$
+CREATE FUNCTION get_user_by_id(arg_userid uuid) RETURNS tbusers AS $$
     SELECT *
     FROM tbusers
-    WHERE userid = userid
+    WHERE userid = arg_userid
 $$ LANGUAGE SQL;
 
 CREATE FUNCTION get_user_by_login(login varchar(254)) RETURNS tbusers AS $$
@@ -28,14 +28,14 @@ CREATE FUNCTION get_user_by_login(login varchar(254)) RETURNS tbusers AS $$
     WHERE name = login OR email = login
 $$ LANGUAGE SQL;
 
-CREATE FUNCTION set_user_verified(userid uuid, value boolean) RETURNS VOID AS $$
+CREATE FUNCTION set_user_verified(arg_userid uuid, value boolean) RETURNS VOID AS $$
     UPDATE tbusers
     SET isverified = value
-    WHERE userid = userid
+    WHERE userid = arg_userid
 $$ LANGUAGE SQL;
 
-CREATE FUNCTION set_user_admin(userid uuid, value boolean) RETURNS VOID AS $$
+CREATE FUNCTION set_user_admin(arg_userid uuid, value boolean) RETURNS VOID AS $$
     UPDATE tbusers
     SET isadmin = value
-    WHERE userid = userid
+    WHERE userid = arg_xuserid
 $$ LANGUAGE SQL;

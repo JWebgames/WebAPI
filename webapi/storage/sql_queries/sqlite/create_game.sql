@@ -1,2 +1,2 @@
-INSERT INTO tbgames(name, ownerid, capacity)
-VALUES (?, ?, ?)
+INSERT INTO tbgames(name, ownerid, capacity, image, port)
+VALUES (?, ?, ?, ?, ?)

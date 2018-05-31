@@ -53,6 +53,10 @@ OUTPUT = """+------------------------------cli:webapi---------------------------
 | SSL_CERT_PATH                    |                              None |
 | SSL_KEY_PATH                     |                              None |
 | SSL_KEY_PASS                     |                              None |
+| GROUP_URL                        |  http://localhost:22548/v1/groups |
+| MSQQUEUES_URL                    | http://localhos...48/v1/msgqueues |
+| PULL_ADDRESS                     |             tcp://127.0.0.1:22549 |
+| PUB_ADDRESS                      |             tcp://127.0.0.1:22550 |
 +----------------------------merged:webapi-----------------------------+
 | HOST                             |                         localhost |
 | PORT                             |                             22548 |
@@ -64,6 +68,10 @@ OUTPUT = """+------------------------------cli:webapi---------------------------
 | SSL_CERT_PATH                    |                              None |
 | SSL_KEY_PATH                     |                              None |
 | SSL_KEY_PASS                     |                              None |
+| GROUP_URL                        |  http://localhost:22548/v1/groups |
+| MSQQUEUES_URL                    | http://localhos...48/v1/msgqueues |
+| PULL_ADDRESS                     |             tcp://127.0.0.1:22549 |
+| PUB_ADDRESS                      |             tcp://127.0.0.1:22550 |
 +---------------------------merged:postgres----------------------------+
 | DSN                              |                              None |
 | HOST                             |                       192.168.0.3 |

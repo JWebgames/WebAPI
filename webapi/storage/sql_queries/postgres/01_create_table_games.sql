@@ -3,44 +3,47 @@ CREATE TABLE tbgames (
     name varchar(24) NOT NULL UNIQUE,
     ownerid uuid NOT NULL,
     capacity smallint NOT NULL,
+    image varchar(36) NOT NULL UNIQUE,
+    port int NOT NULL,
 
+    CONSTRAINT chk_port CHECK(port >= 0 AND port < 65536),
     CONSTRAINT fk_ownerid FOREIGN KEY (ownerid)
         REFERENCES tbusers
         ON UPDATE CASCADE
         ON DELETE RESTRICT
 );
 
-CREATE FUNCTION create_game(name varchar(24), ownerid uuid, capacity smallint) RETURNS smallint AS $$
-    INSERT INTO tbgames (name, ownerid, capacity)
-    VALUES (name, ownerid, capacity)
+CREATE FUNCTION create_game(name varchar(24), ownerid uuid, capacity smallint, image varchar(36), port int) RETURNS smallint AS $$
+    INSERT INTO tbgames (name, ownerid, capacity, image, port)
+    VALUES (name, ownerid, capacity, image, port)
     RETURNING gameid
 $$ LANGUAGE SQL;
 
-CREATE FUNCTION get_all_games() RETURNS tbgames AS $$
+CREATE FUNCTION get_all_games() RETURNS SETOF tbgames AS $$
     SELECT *
     FROM tbgames
 $$ LANGUAGE SQL;
 
-CREATE FUNCTION get_game_by_id(gameid smallint) RETURNS tbgames AS $$
+CREATE FUNCTION get_game_by_id(arg_gameid smallint) RETURNS tbgames AS $$
     SELECT *
     FROM tbgames
-    WHERE gameid = gameid
+    WHERE gameid = arg_gameid
 $$ LANGUAGE SQL;
 
-CREATE FUNCTION get_game_by_name(name varchar(24)) RETURNS tbgames AS $$
+CREATE FUNCTION get_game_by_name(arg_name varchar(24)) RETURNS tbgames AS $$
     SELECT *
     FROM tbgames
-    WHERE name = name
+    WHERE name = arg_name
 $$ LANGUAGE SQL;
 
-CREATE FUNCTION get_games_by_owner(ownerid uuid) RETURNS tbgames as $$
+CREATE FUNCTION get_games_by_owner(arg_ownerid uuid) RETURNS SETOF tbgames as $$
     SELECT *
     FROM tbgames
-    WHERE ownerid = ownerid
+    WHERE ownerid = arg_ownerid
 $$ LANGUAGE SQL;
 
-CREATE FUNCTION set_game_owner(gameid smallint, ownerid uuid) RETURNS VOID as $$
+CREATE FUNCTION set_game_owner(arg_gameid smallint, ownerid uuid) RETURNS VOID as $$
     UPDATE tbgames
     SET ownerid = ownerid
-    WHERE gameid = gameid
+    WHERE gameid = arg_gameid
 $$ LANGUAGE SQL;

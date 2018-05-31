@@ -253,16 +253,17 @@ class TestMatchMaker(TestCase):
         coro = drivers.KVS.join_queue(groupid)
         self.assertRaises(GroupNotReady, lruc, coro)
 
-class TestMsgQueue(TestCase):
-    """Test case for function related to the Match Maker"""
+class TestMessager(TestCase):
+    """Test case for Messager"""
     def setUp(self):
         try:
             if webapi.PRODUCTION:
                 lruc(asyncio.gather(connect_to_postgres(None, loop),
-                            connect_to_redis(None, loop)))
+                                    connect_to_redis(None, loop)))
             else:
                 drivers.RDB = drivers.SQLite()
                 drivers.KVS = drivers.InMemory()
+            drivers.MSG = drivers.Messager()
 
             userid = uuid4()
             lruc(drivers.RDB.create_user(
@@ -283,6 +284,8 @@ class TestMsgQueue(TestCase):
                             disconnect_from_redis(None, loop)))
             else:
                 drivers.RDB.conn.close()
+            
+            drivers.MSG.close()
 
             self.user = None
             self.game = None
@@ -291,13 +294,18 @@ class TestMsgQueue(TestCase):
     
     def test_send_recv_messages(self):
         async def feeder(message):
-            await drivers.KVS.send_message(
+            await drivers.MSG.send_message(
                 MsgQueueType.USER, self.user.userid, message)
 
         async def reciever():
-            async for msg in drivers.KVS.recv_messages(MsgQueueType.USER,
-                                                       self.user.userid):
-                return msg
+            gen = drivers.MSG.recv_messages(MsgQueueType.USER, self.user.userid)
+            async for sentinel in gen:
+                logger.debug(sentinel)
+                break
+            async for msg in gen:
+                logger.debug(msg)
+                await gen.asend(sentinel)
+            return msg
 
         payload = {"value": randint(0, 99)}
         asyncio.get_event_loop().call_later(0.1, asyncio.ensure_future, feeder(payload))

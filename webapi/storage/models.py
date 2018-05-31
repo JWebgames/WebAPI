@@ -12,7 +12,7 @@ class jsonable:
         else:
             dict_ = self.__dict__.copy()
         for key, value in dict_.items():
-            if type(value) is not str and isinstance(value, Iterable):
+            if type(value) not in [bytes, str] and isinstance(value, Iterable):
                 for idx, sub_value in enumerate(value.copy()):
                     if isinstance(sub_value, UUID):
                         dict_[key][idx] = str(sub_value)
@@ -66,7 +66,7 @@ class User(jsonable):
         tmpl = "User(userid={userid}, name={name}, " \
                "email={email}, password=<not shown>, " \
                "isverified={isverified}, isadmin={isadmin})"
-        return tmpl.format(**self._asdict())
+        return tmpl.format(**self.asdict())
 
 
 class Game(jsonable):
@@ -74,12 +74,16 @@ class Game(jsonable):
     name: str
     ownerid: UUID
     capacity: int
+    image: str
+    port: int
 
-    def __init__(self, gameid, name, ownerid, capacity):
+    def __init__(self, gameid, name, ownerid, capacity, image, port):
         self.gameid = int(gameid)
         self.name = name
         self.ownerid = ownerid if isinstance(ownerid, UUID) else UUID(ownerid)
         self.capacity = int(capacity)
+        self.image = image
+        self.port = int(port)
 
 
 class Group(jsonable):

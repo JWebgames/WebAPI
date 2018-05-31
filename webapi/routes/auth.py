@@ -1,3 +1,5 @@
+import atexit
+from asyncio import ensure_future
 from contextlib import suppress
 from datetime import datetime, timedelta
 from logging import getLogger
@@ -10,10 +12,12 @@ from sanic import Blueprint
 from sanic.exceptions import Forbidden, NotFound
 from sanic.response import json, text
 from .. import config
+from .. import server
 from ..middlewares import authenticate, require_fields
 from ..storage import drivers
 from ..storage.models import ClientType
-from ..exceptions import NotFoundError, WrongGroupState, PlayerNotInGroup
+from ..exceptions import NotFoundError, WrongGroupState, PlayerNotInGroup, WebAPIError
+from ..tools import generate_token
 
 bp = Blueprint("auth")
 logger = getLogger(__name__)
@@ -61,8 +65,14 @@ async def login(req, login, password):
 @bp.route("/", methods=["DELETE"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
 async def logout(req, jwt):
-    with suppress(PlayerNotInGroup, WrongGroupState):
-        await drivers.KVS.leave_group(jwt["uid"])
     await drivers.KVS.revoke_token(jwt)
+    url = "{}/kick/{}".format(config.webapi.GROUP_URL, jwt["uid"])
+    headers = {"Authorization": "Bearer: %s" % \
+               generate_token(config.webapi.JWT_SECRET,
+                              typ=ClientType.ADMIN.value)}
+    async with server.http_client.delete(url, headers=headers) as res:
+        if res.status not in [204, 404]:
+            logger.error("Error calling url %s: %s %s",
+                        url, res.status, res.reason)
     logger.info("User disconnected: %s", jwt["jti"])
     return text("", status=204)

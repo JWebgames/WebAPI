@@ -1,7 +1,7 @@
 """Interfaces and implementation of databases drivers"""
 
 from asyncio import ensure_future, gather, Queue
-from collections import OrderedDict, Iterable, defaultdict
+from collections import defaultdict
 from datetime import datetime, timedelta
 from json import dumps as json_dumps
 from logging import getLogger
@@ -9,30 +9,35 @@ from operator import methodcaller
 from os import listdir
 from os.path import join as pathjoin
 from pathlib import Path
+from random import randint
+from sqlite3 import connect as sqlite3_connect
 from time import time
+from uuid import UUID, uuid4
+
+import zmq
+import zmq.asyncio
 from aioredis import Redis as AIORedis
 from asyncpg import Record
-from sqlite3 import connect as sqlite3_connect
+
 from .models import User, Game, State, MsgQueueType, \
                     Group, UserKVS, Slot, Message
+from .. import config
 from ..tools import root, fake_async
-from webapi.exceptions import PlayerInGroupAlready, \
-                              PlayerNotInGroup, \
-                              GroupDoesntExist, \
-                              GroupIsFull, \
-                              GroupNotReady, \
-                              WrongGroupState, \
-                              GameDoesntExist, \
-                              NotFoundError
-from uuid import UUID, uuid4
-from time import time
-from typing import NewType
+from ..exceptions import PlayerInGroupAlready, \
+                         PlayerNotInGroup, \
+                         GroupDoesntExist, \
+                         GroupIsFull, \
+                         GroupNotReady, \
+                         WrongGroupState, \
+                         GameDoesntExist, \
+                         NotFoundError
+
 
 logger = getLogger(__name__)
-AutoIncr = NewType("AutoIncr", int)
-
 RDB: "RelationalDataBase"
 KVS: "KeyValueStore"
+MSG: "Messager"
+CTR: "Docker"
 
 
 class RelationalDataBase():
@@ -57,7 +62,7 @@ class RelationalDataBase():
         """Set a user as admin"""
         raise NotImplementedError()
 
-    async def create_game(self, name, ownerid, capacity):
+    async def create_game(self, name, ownerid, capacity, image, port):
         """Create a game"""
         raise NotImplementedError()
 
@@ -72,13 +77,13 @@ class RelationalDataBase():
     async def get_games_by_owner(self, ownerid):
         """Get games given their owner"""
         raise NotImplementedError()
+    
+    async def get_all_games(self):
+        """Get all games"""
+        raise NotImplementedError()
 
     async def set_game_owner(self, ownerid):
         """Change the owner of a game"""
-        raise NotImplementedError()
-
-    async def create_party(self, partyid, gamename, userids):
-        """Create a party"""
         raise NotImplementedError()
 
 
@@ -95,132 +100,130 @@ class Postgres(RelationalDataBase):
                 for sql in filter(methodcaller("strip"), sqlfile.read().split(";")):
                     status = await self.conn.execute(sql)
                     logger.debug("%s", status)
+    
+    async def create_user(self, userid, name, email, hashed_password):
+        query = await self.conn.prepare("SELECT create_user($1, $2, $3, $4)")
+        await query.fetch(userid, name, email, hashed_password)
 
-    async def prepare(self):
-        """Cache all SQL available functions"""
+    async def get_user_by_login(self, login):
+        query = await self.conn.prepare("SELECT * FROM get_user_by_login($1)")
+        user = await query.fetchrow(login)
+        if user["userid"] is None:
+            raise NotFoundError()
+        return User(**dict(user.items()))
 
-        functions = [
-            ("create_user", 4, None, 0),
-            ("get_user_by_id", 1, User, 1),
-            ("get_user_by_login", 1, User, 1),
-            ("set_user_admin", 2, None, 0),
-            ("set_user_verified", 2, None, 0),
-            ("create_game", 3, AutoIncr, 1),
-            ("get_all_games", 0, Game, 2),
-            ("get_game_by_id", 1, Game, 1),
-            ("get_game_by_name", 1, Game, 1),
-            ("get_games_by_owner", 1, Game, 2),
-            ("set_game_owner", 2, None, 0)
-        ]
+    async def get_user_by_id(self, id_):
+        query = await self.conn.prepare("SELECT * FROM get_user_by_id($1)")
+        user = await query.fetchrow(id_)
+        if user["userid"] is None:
+            raise NotFoundError()
+        return User(**dict(user.items()))
 
-        async def wrap(name, argscnt, class_, resultcnt):
-            """Create the prepated statement"""
-            if argscnt:
-                sqlargs = ", $".join(map(str, range(1, argscnt + 1)))
-                query = await self.conn.prepare("SELECT %s($%s)" % (name, sqlargs))
-            else:
-                query = await self.conn.prepare("SELECT %s()" % name)
+    async def set_user_admin(self, userid, value):
+        query = await self.conn.prepare("SELECT set_user_admin($1, $2)")
+        await query.fetch(userid, value)
 
-            if resultcnt == 0:
-                async def wrapped_none(*args):
-                    await query.fetchrow(*args)
-                return wrapped_none
+    async def set_user_verified(self, userid, value):
+        query = await self.conn.prepare("SELECT set_user_verified($1, $2)")
+        await query.fetch(userid, value)
 
-            elif resultcnt == 1:
-                async def wrapped_one(*args):
-                    row = await query.fetchval(*args)
-                    if not row:
-                        raise NotFoundError()
-                    if isinstance(row, Record):
-                        return class_(**dict(row.items()))
-                    elif isinstance(row, tuple):
-                        return class_(*row)
-                    else:
-                        try:
-                            class_(row)
-                        except Exception as exc:
-                            err = "{} (type: {}) is not either {}".format(
-                                row, type(row),
-                                " or ".join(map(str, [tuple, Record]))) 
-                            raise TypeError(err) from exc
-                return wrapped_one
-            
-            else:
-                async def wrapped_many(*args):
-                    result = await query.fetchval(*args)
-                    if not result:
-                        return []
-                    rows = [result] if isinstance(result, (Record, tuple)) else result
-                    if isinstance(rows[0], Record):
-                        return map(lambda row: class_(**dict(row.items())), rows)
-                    elif isinstance(rows[0], tuple):
-                        return map(lambda row: class_(*row), rows)
-                    else:
-                        try:
-                            [class_(result)]
-                        except Exception as exc:
-                            err = "{} (type: {}) is not either {}".format(
-                                result[name], type(result[name]),
-                                " or ".join(map(str, [tuple, Record]))) 
-                            raise TypeError(err) from exc
-                return wrapped_many
+    async def create_game(self, name, ownerid, capacity, image, port):
+        query = await self.conn.prepare("SELECT create_game($1, $2, $3, $4, $5)")
+        gameid = await query.fetchrow(name, ownerid, capacity, image, port)
+        return gameid[0]
 
-        for name, args_count, class_, result_count in functions:
-            setattr(self, name, await wrap(name, args_count, class_, result_count))
+    async def get_game_by_id(self, id_):
+        query = await self.conn.prepare("SELECT * FROM get_game_by_id($1)")
+        game = await query.fetchrow(id_)
+        if game["gameid"] is None:
+            raise NotFoundError()
+        return Game(**dict(game.items()))
+    
+    async def get_all_games(self):
+        query = await self.conn.prepare("SELECT * FROM get_all_games()")
+        games = await query.fetch()
+
+        return map(lambda game: Game(**dict(game.items())), games)
+
+    async def get_game_by_name(self, name):
+        query = await self.conn.prepare("SELECT * FROM get_game_by_name($1)")
+        game = await query.fetchrow(name)
+        if game["gameid"] is None:
+            raise NotFoundError()
+        return Game(**dict(game.items()))
 
 
 class SQLite(RelationalDataBase):
     """Implementation database-free"""
     def __init__(self):
         self.conn = sqlite3_connect(":memory:")
-        sqldir = Path(root()).joinpath("storage", "sql_queries", "sqlite")
-
-        def wrap(sql, class_, resultcnt):
-            @fake_async
-            def wrapped(*args):
-                args = list(args)
-                for i in range(len(args)):
-                    if isinstance(args[i], UUID):
-                        args[i] = str(args[i])
-                if resultcnt == 0:
-                    self.conn.cursor().execute(sql, args)
-                elif resultcnt == 1:
-                    row = self.conn.cursor().execute(sql, args).fetchone()
-                    if class_ is AutoIncr:
-                        query = "SELECT last_insert_rowid()"
-                        return self.conn.cursor().execute(query).fetchone()[0]
-                    if row is None:
-                        raise NotFoundError()
-                    return class_(*row)
-                else:
-                    rows = self.conn.cursor().execute(sql, args).fetchall()
-                    return map(class_, rows)
-            return wrapped
+        self.sqldir = Path(root()).joinpath("storage", "sql_queries", "sqlite")
 
         create_tables = [
             "create_table_users",
             "create_table_games"]
         for table in create_tables:
-            with sqldir.joinpath("%s.sql" % table).open() as sqlfile:
+            with self.sqldir.joinpath("%s.sql" % table).open() as sqlfile:
                 self.conn.cursor().execute(sqlfile.read())
 
-        functions = [
-            ("create_user", None, 0),
-            ("get_user_by_id", User, 1),
-            ("get_user_by_login", User, 1),
-            ("set_user_admin", None, 0),
-            ("set_user_verified", None, 0),
-            ("create_game", AutoIncr, 1),
-            ("get_all_games", Game, 2),
-            ("get_game_by_id", Game, 1),
-            ("get_game_by_name", Game, 1),
-            ("get_games_by_owner", Game, 2),
-            ("set_game_owner", None, 0)
-        ]
+    async def create_user(self, userid, name, email, hashed_password):
+        with self.sqldir.joinpath("create_user.sql").open() as sqlfile:
+            self.conn.cursor().execute(sqlfile.read(),
+                [str(userid), name, email, hashed_password])
 
-        for function, class_, result_count in functions:
-            with sqldir.joinpath("%s.sql" % function).open() as sqlfile:
-                setattr(self, function, wrap(sqlfile.read(), class_, result_count))
+    async def get_user_by_login(self, login):
+        with self.sqldir.joinpath("get_user_by_login.sql").open() as sqlfile:
+            query = self.conn.cursor().execute(sqlfile.read(), [login])
+            user = query.fetchone()
+            if user is None:
+                raise NotFoundError()
+            return User(*user)
+
+    async def get_user_by_id(self, id_):
+        with self.sqldir.joinpath("get_user_by_id.sql").open() as sqlfile:
+            query = self.conn.cursor().execute(sqlfile.read(), [str(id_)])
+            user = query.fetchone()
+            if user is None:
+                raise NotFoundError()
+            return User(*user)
+
+    async def set_user_admin(self, userid, value):
+        with self.sqldir.joinpath("set_user_admin.sql").open() as sqlfile:
+            self.conn.cursor().execute(sqlfile.read(), [str(userid), value])
+
+    async def set_user_verified(self, userid, value):
+        with self.sqldir.joinpath("set_user_verified.sql").open() as sqlfile:
+            self.conn.cursor().execute(sqlfile.read(), [str(userid), value])
+
+    async def create_game(self, name, ownerid, capacity, image, port):
+        with self.sqldir.joinpath("create_game.sql").open() as sqlfile:
+            self.conn.cursor().execute(sqlfile.read(),
+                [name, str(ownerid), capacity, image, port])
+    
+        query = "SELECT last_insert_rowid()"
+        return self.conn.cursor().execute(query).fetchone()[0] 
+
+    async def get_game_by_id(self, id_):
+        with self.sqldir.joinpath("get_game_by_id.sql").open() as sqlfile:
+            query = self.conn.cursor().execute(sqlfile.read(), [str(id_)])
+            game = query.fetchone()
+            if game is None:
+                raise NotFoundError()
+            return Game(*game)
+
+    async def get_game_by_name(self, name):
+        with self.sqldir.joinpath("get_game_by_name.sql").open() as sqlfile:
+            query = self.conn.cursor().execute(sqlfile.read(), [name])
+            game = query.fetchone()
+            if game is None:
+                raise NotFoundError()
+            return Game(*game)
+    
+    async def get_all_games(self):
+        with self.sqldir.joinpath("get_all_games.sql").open() as sqlfile:
+            query = self.conn.cursor().execute(sqlfile.read())
+            games = query.fetchall()
+            return map(lambda game: Game(*game), games)
 
 
 class KeyValueStore():
@@ -276,10 +279,7 @@ class KeyValueStore():
     async def create_party(self, groupid):
         raise NotImplementedError()
     
-    async def send_message(self, queue_group, queue_target, id_, payload):
-        raise NotImplementedError()
-
-    async def recv_messages(self, queue, id_):
+    async def create_game(self, slotit):
         raise NotImplementedError()
 
 
@@ -444,19 +444,13 @@ class Redis(KeyValueStore):
             await self.leave_queue(groupid)
         
         await self.redis.set(Redis.user_ready_key.format(userid), b"0")
-    
-    async def is_user_ready(self, userid):
-        ready = self.redis.get(Redis.user_ready_key.format(userid))
-        if ready is None:
-            raise PlayerNotInGroup()
-        return ready == b"1"
 
-    async def is_ready(self, userid):
+    async def is_user_ready(self, userid):
         return (await self.redis.get(Redis.user_ready_key.format(userid))) == b"1"
     
     async def is_group_ready(self, groupid):
         return all(await gather(*[
-            self.is_ready(userid.decode()) for userid in 
+            self.is_user_ready(userid.decode()) for userid in 
             await self.redis.smembers(Redis.group_members_key.format(groupid))]))
 
 
@@ -470,10 +464,9 @@ class Redis(KeyValueStore):
         state = State(await self.redis.get(group_state_key))
         if state != State.GROUP_CHECK:
             raise WrongGroupState(state, State.GROUP_CHECK)
-        await self.redis.set(group_state_key, State.IN_QUEUE.value)
-
         if not (await self.is_group_ready(groupid)):
             raise GroupNotReady()
+        await self.redis.set(group_state_key, State.IN_QUEUE.value)
 
         game = await RDB.get_game_by_id(gameid)
         group_members_key = Redis.group_members_key.format(groupid)
@@ -528,17 +521,6 @@ class Redis(KeyValueStore):
         if (await self.redis.scard(slot_players_key)) == 0:
             self.redis.lrem(Redis.game_queue_key.format(gameid), 1, slotid)
         await self.redis.set(group_state_key, State.GROUP_CHECK.value)
-    
-    async def send_message(self, queue, id_, payload):
-        await self.redis.publish(
-            Redis.msgqueue_key.format(queue.value, id_),
-            json_dumps(payload).encode("utf-8"))
-
-    async def recv_messages(self, queue, id_):
-        key = Redis.msgqueue_key.format(queue.value, id_)
-        chan = (await self.redis.subscribe(key))[0]
-        while await chan.wait_message():
-            yield await chan.get(encoding="utf-8")
 
 
 class InMemory(KeyValueStore):
@@ -634,7 +616,10 @@ class InMemory(KeyValueStore):
         user.ready = False
         if self.groups[user.groupid].state == State.IN_QUEUE:
             await self.leave_queue(user.groupid)
-            
+    
+    @fake_async
+    def is_user_ready(self, userid):
+        return self.users[userid].ready
 
     @fake_async
     def leave_group(self, userid):
@@ -652,7 +637,7 @@ class InMemory(KeyValueStore):
         del self.users[userid]
         group.members.remove(userid)
         if not group.members:
-            del self.groups[groupid]
+            del self.groups[user.groupid]
     
     @fake_async
     def get_user(self, userid):
@@ -724,10 +709,106 @@ class InMemory(KeyValueStore):
             self.queues[group.gameid].remove(group.slotid)
         group.slotid = None
         group.state = State.GROUP_CHECK
+    
+    async def start_game(self, slotid):
+        partyid = uuid4()
+        payload = {"type": "game:starting",
+                   "partyid": str(partyid)}
+        slot = self.slots[slotid]
+        for groupid in slot.groups:
+            await MSG.send_message(MsgQueueType.GROUP, groupid, payload)
+            group = self.groups[groupid]
+            group.state = State.PLAYING
+            group.partyid = partyid
+        for userid in slot.players:
+            self.users[userid].partyid = partyid
+
+        ensure_future(CTR.create_game(gameid, partyid))
+
+
+class Messager:
+    """Send and recieve message over ZeroMQ"""
+
+    def __init__(self):
+        self.context = zmq.asyncio.Context()
+        self.pusher = self.context.socket(zmq.PUSH)
+        self.pusher.connect(config.webapi.PULL_ADDRESS)
+        logger.debug("Connected to messager puller running on %s",
+                     config.webapi.PULL_ADDRESS)
 
     async def send_message(self, queue, id_, payload):
-        await self.msgqueues[queue][id_].put(json_dumps(payload).encode())
+        """PUSH a message to be PUB by the Messager"""
+        await self.pusher.send_string(
+            "{}:{!s} {}".format(queue.value, id_, json_dumps(payload)))
 
     async def recv_messages(self, queue, id_):
+        """SUB to messages PUB by th Message"""
+        sub_pattern = "{}:{!s}".format(queue.value, id_)
+        suber = self.context.socket(zmq.SUB)
+        suber.connect(config.webapi.PUB_ADDRESS)
+        logger.debug("Connected to messager publisher running on %s",
+                     config.webapi.PUB_ADDRESS)
+        suber.setsockopt_string(zmq.SUBSCRIBE, sub_pattern)
+        logger.debug("Recieving message for pattern %s",
+                     sub_pattern)
+        
+        sentinel = object()
+        yield sentinel
         while True:
-            yield await self.msgqueues[queue][id_].get()
+            if ((yield (await suber.recv_string())[len(sub_pattern) + 1:])
+                is sentinel):
+                break
+        yield
+        logger.debug("Stop recieving message for pattern %s "
+                     "and closing connection", sub_pattern)
+        suber.close()
+    
+    def close(self):
+        self.pusher.close()
+
+class Docker:
+    def __init__(self, docker):
+        self.docker = docker
+
+    async def create_game(gameid, partyid):
+        game = await RDB.get_game_by_id(gameid)
+
+        host = "localhost"
+        port = randint(22500, 22599)
+
+        config = {
+            #"Cmd": ["-text", "hello"],
+            #"Image": "hashicorp/http-echo",
+            "Image": game.image,
+            "AttachStdin": False,
+            "AttachStdout": True,
+            "AttachStderr": True,
+            "Tty": False,
+            "OpenStdin": False,
+            "HostConfig": {
+                "PortBindings": {
+                    "{}/tcp".format(game.port): [
+                        {
+                            "HostIp": "0.0.0.0",
+                            "HostPort": str(port)
+                        }
+                    ]
+                }
+            }
+        }
+
+        logger.info("Starting %s...", game.name)
+        container = await self.docker.run(config=config)
+        
+        payload = {"type": "game:started", "host": host, "port": port}
+        await MSG.send_message(MsgQueueType.PARTY, partyid, payload)
+
+        game_logger = getLogger("game.{}.{}".format(gameid, partyid))
+        async for line in (await container.log(stdout=True, stderr=True, follow=True)):
+            game_logger.debug(line)
+        await container.wait()
+
+        payload = {"type": "game:over"}
+        await MSG.send_message(MsgQueueType.PARTY, partyid, payload)
+
+

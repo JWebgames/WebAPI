@@ -3,7 +3,7 @@ users:<userid>:partyid => partyid
 users:<userid>:ready => bool
 
 groups:<groupid>:gameid => gameid
-groups:<groupid>:slotit => slotit
+groups:<groupid>:slotid => slotid
 groups:<groupid>:partyid => partyid
 groups:<groupid>:state => models.State
 groups:<groupid>:members => Set[userid]
@@ -12,3 +12,5 @@ queues:<gameid> => List[slotit]
 
 slots:<slotid>:players => Set[userid]
 slots:<slotid>:groups => Set[groupid]
+
+parties:<partyid>:slotid => slotid
