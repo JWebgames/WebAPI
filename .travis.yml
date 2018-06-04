@@ -8,7 +8,10 @@ install:
   - pip install -r requirements_test.txt
 env:
   WEBAPI_ROOT=$PWD/webapi
-  WEBAPI_PRODUCTION=False
+  WEBAPI_TEST_USING_CONFIG=1
+  WEBAPI_PRODUCTION=0
+  WEBAPI_PULL_ADDRESS="tcp://julien00859.be:22549"
+  WEBAPI_PUB_ADDRESS="tcp://julien00859.be:22550"
 script: 
   - python -m unittest -v
   - python -m webapi dryrun
