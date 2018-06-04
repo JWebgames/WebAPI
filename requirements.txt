@@ -1,6 +1,6 @@
 aiodocker==0.13.0
 aiofiles==0.3.2
-aiohttp==3.2.1
+aiohttp==3.3.0
 aioredis==1.1.0
 async-timeout==3.0.0
 asyncpg==0.15.0
