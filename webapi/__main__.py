@@ -79,12 +79,12 @@ def dryrun():
     setup()
     from . import server
     loop = asyncio.get_event_loop()
-    future = asyncio.gather(server.connect_to_postgres(None, loop, False),
+    future = asyncio.gather(server.connect_to_postgres(None, loop),
                             server.connect_to_redis(None, loop))
     try:
         loop.run_until_complete(future)
     except:
-        logger.warning("Was not able to connect to databases...", exc_info=True)
+        logger.warning("Was not able to connect to databases...")
     else:
         future = asyncio.gather(server.disconnect_from_postgres(None, loop),
                                 server.disconnect_from_redis(None, loop))
