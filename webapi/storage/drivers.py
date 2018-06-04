@@ -1,15 +1,15 @@
 """Interfaces and implementation of databases drivers"""
 
-from asyncio import ensure_future, gather, Queue
+from asyncio import ensure_future, gather, Queue, sleep
 from collections import defaultdict
 from datetime import datetime, timedelta
 from json import dumps as json_dumps
-from logging import getLogger
+from logging import getLogger, StreamHandler, Formatter
 from operator import methodcaller
 from os import listdir
 from os.path import join as pathjoin
 from pathlib import Path
-from random import randint
+from random import sample
 from sqlite3 import connect as sqlite3_connect
 from time import time
 from uuid import UUID, uuid4
@@ -20,7 +20,7 @@ from aioredis import Redis as AIORedis
 from asyncpg import Record
 
 from .models import User, Game, State, MsgQueueType, \
-                    Group, UserKVS, Slot, Message
+                    Group, UserKVS, Slot, Message, Party
 from .. import config
 from ..tools import root, fake_async
 from ..exceptions import PlayerInGroupAlready, \
@@ -30,10 +30,18 @@ from ..exceptions import PlayerInGroupAlready, \
                          GroupNotReady, \
                          WrongGroupState, \
                          GameDoesntExist, \
-                         NotFoundError
+                         NotFoundError, \
+                         PartyDoesntExist
 
 
 logger = getLogger(__name__)
+
+game_logger = getLogger("game")
+game_logger.propagate = False
+game_handler = StreamHandler()
+game_handler.formatter = Formatter("<{name}> {message}", style="{")
+game_logger.handlers = [game_handler]
+
 RDB: "RelationalDataBase"
 KVS: "KeyValueStore"
 MSG: "Messager"
@@ -89,65 +97,75 @@ class RelationalDataBase():
 
 class Postgres(RelationalDataBase):
     """Implementation for postgres"""
-    def __init__(self, pgconn):
-        self.conn = pgconn
+    def __init__(self, pgpool):
+        self.pool = pgpool
 
     async def install(self):
         """Create tables and functions"""
         sqldir = pathjoin(root(), "storage", "sql_queries", "postgres")
-        for file in sorted(listdir(sqldir)):
-            with Path(sqldir).joinpath(file).open() as sqlfile:
-                for sql in filter(methodcaller("strip"), sqlfile.read().split(";")):
-                    status = await self.conn.execute(sql)
-                    logger.debug("%s", status)
+        async with self.pool.acquire() as conn:
+            for file in sorted(listdir(sqldir)):
+                with Path(sqldir).joinpath(file).open() as sqlfile:
+                    for sql in filter(methodcaller("strip"), sqlfile.read().split(";")):
+                        status = await conn.execute(sql)
+                        logger.debug("%s", status)
     
     async def create_user(self, userid, name, email, hashed_password):
-        query = await self.conn.prepare("SELECT create_user($1, $2, $3, $4)")
-        await query.fetch(userid, name, email, hashed_password)
+        async with self.pool.acquire() as conn:
+            query = await conn.prepare("SELECT create_user($1, $2, $3, $4)")
+            await query.fetch(userid, name, email, hashed_password)
 
     async def get_user_by_login(self, login):
-        query = await self.conn.prepare("SELECT * FROM get_user_by_login($1)")
-        user = await query.fetchrow(login)
+        async with self.pool.acquire() as conn:
+            query = await conn.prepare("SELECT * FROM get_user_by_login($1)")
+            user = await query.fetchrow(login)
         if user["userid"] is None:
             raise NotFoundError()
         return User(**dict(user.items()))
 
     async def get_user_by_id(self, id_):
-        query = await self.conn.prepare("SELECT * FROM get_user_by_id($1)")
-        user = await query.fetchrow(id_)
+        async with self.pool.acquire() as conn:
+            query = await conn.prepare("SELECT * FROM get_user_by_id($1)")
+            user = await query.fetchrow(id_)
         if user["userid"] is None:
             raise NotFoundError()
         return User(**dict(user.items()))
 
     async def set_user_admin(self, userid, value):
-        query = await self.conn.prepare("SELECT set_user_admin($1, $2)")
-        await query.fetch(userid, value)
+        async with self.pool.acquire() as conn:
+            query = await conn.prepare("SELECT set_user_admin($1, $2)")
+            await query.fetch(userid, value)
 
     async def set_user_verified(self, userid, value):
-        query = await self.conn.prepare("SELECT set_user_verified($1, $2)")
-        await query.fetch(userid, value)
+        async with self.pool.acquire() as conn:
+            query = await conn.prepare("SELECT set_user_verified($1, $2)")
+            await query.fetch(userid, value)
 
-    async def create_game(self, name, ownerid, capacity, image, port):
-        query = await self.conn.prepare("SELECT create_game($1, $2, $3, $4, $5)")
-        gameid = await query.fetchrow(name, ownerid, capacity, image, port)
+    async def create_game(self, name, ownerid, capacity, image, ports):
+        async with self.pool.acquire() as conn:
+            query = await conn.prepare("SELECT create_game($1, $2, $3, $4, $5)")
+            gameid = await query.fetchrow(name, ownerid, capacity, image, ports)
         return gameid[0]
 
     async def get_game_by_id(self, id_):
-        query = await self.conn.prepare("SELECT * FROM get_game_by_id($1)")
-        game = await query.fetchrow(id_)
+        async with self.pool.acquire() as conn:
+            query = await conn.prepare("SELECT * FROM get_game_by_id($1)")
+            game = await query.fetchrow(id_)
         if game["gameid"] is None:
             raise NotFoundError()
         return Game(**dict(game.items()))
     
     async def get_all_games(self):
-        query = await self.conn.prepare("SELECT * FROM get_all_games()")
-        games = await query.fetch()
+        async with self.pool.acquire() as conn:
+            query = await conn.prepare("SELECT * FROM get_all_games()")
+            games = await query.fetch()
 
         return map(lambda game: Game(**dict(game.items())), games)
 
     async def get_game_by_name(self, name):
-        query = await self.conn.prepare("SELECT * FROM get_game_by_name($1)")
-        game = await query.fetchrow(name)
+        async with self.pool.acquire() as conn:
+            query = await conn.prepare("SELECT * FROM get_game_by_name($1)")
+            game = await query.fetchrow(name)
         if game["gameid"] is None:
             raise NotFoundError()
         return Game(**dict(game.items()))
@@ -195,10 +213,10 @@ class SQLite(RelationalDataBase):
         with self.sqldir.joinpath("set_user_verified.sql").open() as sqlfile:
             self.conn.cursor().execute(sqlfile.read(), [str(userid), value])
 
-    async def create_game(self, name, ownerid, capacity, image, port):
+    async def create_game(self, name, ownerid, capacity, image, ports):
         with self.sqldir.joinpath("create_game.sql").open() as sqlfile:
             self.conn.cursor().execute(sqlfile.read(),
-                [name, str(ownerid), capacity, image, port])
+                [name, str(ownerid), capacity, image, ports[0]])
     
         query = "SELECT last_insert_rowid()"
         return self.conn.cursor().execute(query).fetchone()[0] 
@@ -276,12 +294,17 @@ class KeyValueStore():
         """Remove the group from the queue"""
         raise NotImplementedError()
     
-    async def create_party(self, groupid):
+    async def start_game(self, gameid, slotid):
+        """Prepare the database to start a game"""
         raise NotImplementedError()
     
-    async def create_game(self, slotit):
+    async def create_party(self, partyid, slotid, host, ports):
+        """Crea"""
         raise NotImplementedError()
 
+    async def end_game(self, partyid):
+        """Clean the dabatase at the end of a game"""
+        raise NotImplementedError()
 
 class Redis(KeyValueStore):
     """Implementation for Redis"""
@@ -297,6 +320,10 @@ class Redis(KeyValueStore):
     game_queue_key = "queues:{!s}"
     slot_players_key = "slots:{!s}:players"
     slot_groups_key = "slots:{!s}:groups"
+    party_gameid_key = "parties:{!s}:gameid"
+    party_slotid_key = "parties:{!s}:slotid"
+    party_host_key = "parties:{!s}:host"
+    party_ports_key = "parties:{!s}:ports"
     msgqueue_key = "msgqueues:{!s}:{!s}"
 
     def __init__(self, redis_pool):
@@ -384,6 +411,7 @@ class Redis(KeyValueStore):
             await self.leave_queue(groupid)
 
         await self.redis.delete(user_groupid_key)
+        await self.redis.delete(Redis.user_ready_key.format(userid))
         await self.redis.srem(
             Redis.group_members_key.format(groupid), str(userid))
 
@@ -475,7 +503,7 @@ class Redis(KeyValueStore):
         game_queue_key = Redis.game_queue_key.format(gameid)
         slotids = await self.redis.lrange(
             game_queue_key, 0, await self.redis.llen(game_queue_key))
-        for slotid in map(methodcaller("decode"), slotids):
+        for slotid in [UUID(slotid.decode()) for slotid in slotids]:
             slot_players_key = Redis.slot_players_key.format(slotid)
             slot_size = await self.redis.scard(slot_players_key)
             if slot_size + len(group_members) <= game.capacity:
@@ -487,7 +515,7 @@ class Redis(KeyValueStore):
                     Redis.slot_groups_key.format(slotid), str(groupid))
                 
                 if slot_size + len(group_members) == game.capacity:
-                    ensure_future(self.start_game(UUID(slotid)))
+                    ensure_future(self.start_game(gameid, slotid))
                 break
         else:
             slotid = uuid4()
@@ -499,7 +527,7 @@ class Redis(KeyValueStore):
             await self.redis.rpush(
                 Redis.game_queue_key.format(gameid), str(slotid))
             if len(group_members) == game.capacity:
-                ensure_future(self.start_game(UUID(slotid)))
+                ensure_future(self.start_game(gameid, slotid))
 
     async def leave_queue(self, groupid):
         gameid = await self.redis.get(Redis.group_gameid_key.format(groupid))
@@ -521,7 +549,74 @@ class Redis(KeyValueStore):
         if (await self.redis.scard(slot_players_key)) == 0:
             self.redis.lrem(Redis.game_queue_key.format(gameid), 1, slotid)
         await self.redis.set(group_state_key, State.GROUP_CHECK.value)
+    
+    async def start_game(self, gameid, slotid):
+        partyid = str(uuid4())
+        payload = {"type": "game:starting", "partyid": str(partyid)}
 
+        groups = await self.redis.smembers(Redis.slot_groups_key.format(slotid))
+        for groupid in map(methodcaller("decode"), groups):
+            await MSG.send_message(MsgQueueType.GROUP, groupid, payload)
+            await self.redis.set(
+                Redis.group_state_key.format(groupid), State.PLAYING.value)
+            await self.redis.set(
+                Redis.group_partyid_key.format(groupid), partyid)
+        
+        users = await self.redis.smembers(Redis.slot_players_key.format(slotid))
+        for userid in map(methodcaller("decode"), users):
+            await self.redis.set(
+                Redis.user_partyid_key.format(userid), partyid)
+        
+        await self.redis.lrem(Redis.game_queue_key.format(gameid), slotid)
+        
+        game = await RDB.get_game_by_id(gameid)
+        party = Party(gameid, slotid, config.webapi.GAME_HOST,
+                      sorted(sample(range(22500, 23000), len(game.ports))))
+        await self.redis.set(
+            Redis.party_gameid_key.format(partyid), str(party.gameid))
+        await self.redis.set(
+            Redis.party_slotid_key.format(partyid), str(party.slotid))
+        await self.redis.set(
+            Redis.party_host_key.format(partyid), party.host)
+        await self.redis.sadd(
+            Redis.party_ports_key.format(partyid), *party.ports)
+
+        ensure_future(CTR.create_game(gameid, game, partyid, party))
+    
+    async def get_party(self, partyid):
+        gameid = await self.redis.get(Redis.party_gameid_key.format(partyid))
+        if gameid is None:
+            raise PartyDoesntExist()
+        slotid = await self.redis.get(Redis.party_slotid_key.format(partyid))
+        host = await self.redis.get(Redis.party_host_key.format(partyid))
+        ports = await self.redis.get(Redis.party_ports_key.format(partyid))
+
+        return Party(gameid=UUID(gameid.decode()),
+                     slotit=UUID(slotid.decode()),
+                     host=host.decode(),
+                     ports=list(map(int, ports)))
+
+    async def end_game(self, partyid):
+        slotid = await self.redis.get(Redis.party_slotid_key.format(partyid))
+        slotid = UUID(slotid.decode())
+
+        groups = await self.redis.smembers(Redis.slot_groups_key.format(slotid))
+        for groupid in map(methodcaller("decode"), groups):
+            await self.redis.set(
+                Redis.group_state_key.format(groupid), State.GROUP_CHECK.value)
+            await self.redis.delete(Redis.group_partyid_key.format(groupid))
+        
+        users = await self.redis.smembers(Redis.slot_players_key.format(slotid))
+        for userid in map(methodcaller("decode"), users):
+            await self.redis.delete(Redis.user_partyid_key.format(userid))
+        
+        await self.redis.delete(Redis.party_gameid_key.format(partyid))
+        await self.redis.delete(Redis.party_slotid_key.format(partyid))
+        await self.redis.delete(Redis.party_host_key.format(partyid))
+        await self.redis.delete(Redis.party_ports_key.format(partyid))
+        await self.redis.delete(Redis.slot_players_key.format(slotid))
+        await self.redis.delete(Redis.slot_groups_key.format(slotid))
+        
 
 class InMemory(KeyValueStore):
     """Implementation database-free"""
@@ -681,7 +776,7 @@ class InMemory(KeyValueStore):
                 slot.groups.append(groupid)
                 group.slotid = slotid
                 if size == game.capacity:
-                    ensure_future(self.start_game(slotid))
+                    ensure_future(self.start_game(game.gameid, slotid))
                 break
         else:
             slotid = uuid4()
@@ -689,7 +784,7 @@ class InMemory(KeyValueStore):
             slot = self.slots[slotid] = Slot(group.members.copy(), [groupid])
             self.queues[game.gameid].append(slotid)
             if len(slot.players) == game.capacity:
-                ensure_future(self.start_game(slotid))
+                ensure_future(self.start_game(game.gameid, slotid))
 
     @fake_async
     def leave_queue(self, groupid, group=None):
@@ -710,10 +805,9 @@ class InMemory(KeyValueStore):
         group.slotid = None
         group.state = State.GROUP_CHECK
     
-    async def start_game(self, slotid):
+    async def start_game(self, gameid, slotid):
         partyid = uuid4()
-        payload = {"type": "game:starting",
-                   "partyid": str(partyid)}
+        payload = {"type": "game:starting", "partyid": str(partyid)}
         slot = self.slots[slotid]
         for groupid in slot.groups:
             await MSG.send_message(MsgQueueType.GROUP, groupid, payload)
@@ -722,8 +816,33 @@ class InMemory(KeyValueStore):
             group.partyid = partyid
         for userid in slot.players:
             self.users[userid].partyid = partyid
+        
+        self.queues[group.gameid].remove(group.slotid)
 
-        ensure_future(CTR.create_game(gameid, partyid))
+        game = await RDB.get_game_by_id(gameid)
+        party = Party(gameid, slotid, config.webapi.GAME_HOST,
+                      sorted(sample(range(22500, 23000), len(game.ports))))
+        self.parties[partyid] = party
+
+        ensure_future(CTR.create_game(gameid, game, partyid, party))
+    
+    @fake_async
+    def get_party(self, partyid):
+        return self.parties[partyid]
+    
+    @fake_async
+    def end_game(self, partyid):
+        slotid = self.parties[partyid].slotid
+        slot = self.slots[slotid]
+        for groupid in slot.groups:
+            group = self.groups[groupid]
+            group.state = State.GROUP_CHECK
+            group.partyid = None
+        for userid in slot.players:
+            self.users[userid].partyid = None
+        
+        del self.slotid[slotid]
+        del self.parties[partyid]
 
 
 class Messager:
@@ -770,12 +889,7 @@ class Docker:
     def __init__(self, docker):
         self.docker = docker
 
-    async def create_game(gameid, partyid):
-        game = await RDB.get_game_by_id(gameid)
-
-        host = "localhost"
-        port = randint(22500, 22599)
-
+    async def create_game(self, gameid, game, partyid, party):
         config = {
             #"Cmd": ["-text", "hello"],
             #"Image": "hashicorp/http-echo",
@@ -787,28 +901,35 @@ class Docker:
             "OpenStdin": False,
             "HostConfig": {
                 "PortBindings": {
-                    "{}/tcp".format(game.port): [
+                    "{}/tcp".format(internal_port): [
                         {
                             "HostIp": "0.0.0.0",
-                            "HostPort": str(port)
+                            "HostPort": str(external_port)
                         }
                     ]
+                    for external_port, internal_port
+                    in zip(party.ports, game.ports)
                 }
             }
         }
 
-        logger.info("Starting %s...", game.name)
-        container = await self.docker.run(config=config)
+        logger.info(
+            "Starting a match of %s (ID: %d) using match ID %s...",
+            game.name, gameid, partyid)
+        container = await self.docker.containers.run(config=config)
+        logger.info("Game started.")
         
-        payload = {"type": "game:started", "host": host, "port": port}
+        payload = {"type": "game:started", "host": party.host, "ports": party.ports}
         await MSG.send_message(MsgQueueType.PARTY, partyid, payload)
 
-        game_logger = getLogger("game.{}.{}".format(gameid, partyid))
+        party_logger = getLogger("game.{!s}.{!s}".format(gameid, partyid))
         async for line in (await container.log(stdout=True, stderr=True, follow=True)):
-            game_logger.debug(line)
+            party_logger.debug(line.strip())
         await container.wait()
+        logger.info("Game over")
+
+        await KVS.end_game(partyid)
 
         payload = {"type": "game:over"}
         await MSG.send_message(MsgQueueType.PARTY, partyid, payload)
-
 

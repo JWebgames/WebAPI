@@ -6,7 +6,7 @@ from unittest import TestCase
 from asynctest import CoroutineMock
 from random import randint
 
-from webapi.config import webapi
+from webapi import config
 from webapi.server import connect_to_postgres, disconnect_from_postgres, \
                           connect_to_redis, disconnect_from_redis
 from webapi.storage import drivers
@@ -28,9 +28,9 @@ class TestRDB(TestCase):
     """Test case for storage.drivers.RelationalDB"""
     def setUp(self):
         try:
-            if webapi.PRODUCTION:
+            if config.webapi.PRODUCTION:
                 lruc(asyncio.gather(connect_to_postgres(None, loop),
-                            connect_to_redis(None, loop)))
+                                    connect_to_redis(None, loop)))
             else:
                 drivers.RDB = drivers.SQLite()
                 drivers.KVS = drivers.InMemory()
@@ -39,19 +39,22 @@ class TestRDB(TestCase):
             lruc(drivers.RDB.create_user(
                 userid, "toto", "toto@example.com", b"suchpasssword"))
             self.user = lruc(drivers.RDB.get_user_by_login("toto"))
-            gameid = lruc(drivers.RDB.create_game("bomberman", self.user.userid, 4))
+            gameid = lruc(drivers.RDB.create_game(
+                "Shifumi", self.user.userid, 4, "shifumi-server", [22451]))
             self.game = lruc(drivers.RDB.get_game_by_id(gameid))
         except:
             logger.exception("Error in setUp RDB")
 
     def tearDown(self):
         try:
-            if webapi.PRODUCTION:
-                lruc(drivers.RDB.conn.fetch("TRUNCATE tbusers CASCADE"))
-                lruc(drivers.RDB.conn.fetch("TRUNCATE tbgames CASCADE"))
+            if config.webapi.PRODUCTION:
+                conn = lruc(drivers.RDB.pool.acquire())
+                lruc(conn.execute("TRUNCATE tbusers CASCADE"))
+                lruc(conn.execute("TRUNCATE tbgames CASCADE"))
+                lruc(drivers.RDB.pool.release(conn))
                 lruc(drivers.KVS.redis.flushdb())
                 lruc(asyncio.gather(disconnect_from_postgres(None, loop),
-                            disconnect_from_redis(None, loop)))
+                                    disconnect_from_redis(None, loop)))
             else:
                 drivers.RDB.conn.close()
 
@@ -73,7 +76,7 @@ class TestMatchMaker(TestCase):
     """Test case for function related to the Match Maker"""
     def setUp(self):
         try:
-            if webapi.PRODUCTION:
+            if config.webapi.PRODUCTION:
                 lruc(asyncio.gather(connect_to_postgres(None, loop),
                             connect_to_redis(None, loop)))
             else:
@@ -84,19 +87,22 @@ class TestMatchMaker(TestCase):
             lruc(drivers.RDB.create_user(
                 userid, "toto", "toto@example.com", b"suchpasssword"))
             self.user = lruc(drivers.RDB.get_user_by_id(userid))
-            gameid = lruc(drivers.RDB.create_game("bomberman", self.user.userid, 4))
+            gameid = lruc(drivers.RDB.create_game(
+                "Shifumi", self.user.userid, 4, "shifumi-server", [22451]))
             self.game = lruc(drivers.RDB.get_game_by_id(gameid))
         except:
             logger.exception("Error in setUp KVS")
 
     def tearDown(self):
         try:
-            if webapi.PRODUCTION:
-                lruc(drivers.RDB.conn.fetch("TRUNCATE tbusers CASCADE"))
-                lruc(drivers.RDB.conn.fetch("TRUNCATE tbgames CASCADE"))
+            if config.webapi.PRODUCTION:
+                conn = lruc(drivers.RDB.pool.acquire())
+                lruc(conn.execute("TRUNCATE tbusers CASCADE"))
+                lruc(conn.execute("TRUNCATE tbgames CASCADE"))
+                lruc(drivers.RDB.pool.release(conn))
                 lruc(drivers.KVS.redis.flushdb())
                 lruc(asyncio.gather(disconnect_from_postgres(None, loop),
-                            disconnect_from_redis(None, loop)))
+                                    disconnect_from_redis(None, loop)))
             else:
                 drivers.RDB.conn.close()
 
@@ -142,7 +148,8 @@ class TestMatchMaker(TestCase):
         queue_filled = lruc(drivers.KVS.join_queue(group_3))
 
         group = lruc(drivers.KVS.get_group(group_3))
-        drivers.KVS.start_game.assert_called_once_with(group.slotid)
+        drivers.KVS.start_game.assert_called_once_with(
+            self.game.gameid, group.slotid)
         
 
     def test_create_group_while_alone(self):
@@ -257,7 +264,7 @@ class TestMessager(TestCase):
     """Test case for Messager"""
     def setUp(self):
         try:
-            if webapi.PRODUCTION:
+            if config.webapi.PRODUCTION:
                 lruc(asyncio.gather(connect_to_postgres(None, loop),
                                     connect_to_redis(None, loop)))
             else:
@@ -269,19 +276,22 @@ class TestMessager(TestCase):
             lruc(drivers.RDB.create_user(
                 userid, "toto", "toto@example.com", b"suchpasssword"))
             self.user = lruc(drivers.RDB.get_user_by_id(userid))
-            gameid = lruc(drivers.RDB.create_game("bomberman", self.user.userid, 4))
+            gameid = lruc(drivers.RDB.create_game(
+                "Shifumi", self.user.userid, 4, "shifumi-server", [22451]))
             self.game = lruc(drivers.RDB.get_game_by_id(gameid))
         except:
             logger.exception("Error in setUp KVS")
 
     def tearDown(self):
         try:
-            if webapi.PRODUCTION:
-                lruc(drivers.RDB.conn.fetch("TRUNCATE tbusers CASCADE"))
-                lruc(drivers.RDB.conn.fetch("TRUNCATE tbgames CASCADE"))
+            if config.webapi.PRODUCTION:
+                conn = lruc(drivers.RDB.pool.acquire())
+                lruc(conn.execute("TRUNCATE tbusers CASCADE"))
+                lruc(conn.execute("TRUNCATE tbgames CASCADE"))
+                lruc(drivers.RDB.pool.release(conn))
                 lruc(drivers.KVS.redis.flushdb())
                 lruc(asyncio.gather(disconnect_from_postgres(None, loop),
-                            disconnect_from_redis(None, loop)))
+                                    disconnect_from_redis(None, loop)))
             else:
                 drivers.RDB.conn.close()
             
