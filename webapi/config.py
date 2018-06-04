@@ -54,6 +54,7 @@ class WebAPIConfig(NamedTuple):
     MSQQUEUES_URL: str = "http://localhost:22548/v1/msgqueues"
     PULL_ADDRESS: str = "tcp://127.0.0.1:22549"
     PUB_ADDRESS: str = "tcp://127.0.0.1:22550"
+    GAME_HOST: str = "localhost"
 
 
 postgres: "PostgresConfig"

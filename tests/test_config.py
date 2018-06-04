@@ -57,6 +57,7 @@ OUTPUT = """+------------------------------cli:webapi---------------------------
 | MSQQUEUES_URL                    | http://localhos...48/v1/msgqueues |
 | PULL_ADDRESS                     |             tcp://127.0.0.1:22549 |
 | PUB_ADDRESS                      |             tcp://127.0.0.1:22550 |
+| GAME_HOST                        |                         localhost |
 +----------------------------merged:webapi-----------------------------+
 | HOST                             |                         localhost |
 | PORT                             |                             22548 |
@@ -72,6 +73,7 @@ OUTPUT = """+------------------------------cli:webapi---------------------------
 | MSQQUEUES_URL                    | http://localhos...48/v1/msgqueues |
 | PULL_ADDRESS                     |             tcp://127.0.0.1:22549 |
 | PUB_ADDRESS                      |             tcp://127.0.0.1:22550 |
+| GAME_HOST                        |                         localhost |
 +---------------------------merged:postgres----------------------------+
 | DSN                              |                              None |
 | HOST                             |                       192.168.0.3 |
