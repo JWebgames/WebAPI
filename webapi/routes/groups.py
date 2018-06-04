@@ -95,7 +95,10 @@ async def leave(req, jwt):
 @bp.route("/kick/<userid>", methods=["DELETE"])
 @authenticate({ClientType.ADMIN})
 async def kick(req, userid, jwt):
-    return await do_leave(userid, None)
+    with suppress(WrongGroupState):
+        return await do_leave(userid, None)
+    logger.warning("Cannot kick a player playing")
+    return text("", status=204)
 
 async def do_leave(userid, username):
     user = await drivers.KVS.get_user(userid)
