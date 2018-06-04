@@ -53,7 +53,12 @@ def wizard():
             user = lruc(drivers.RDB.get_user_by_login(input("Owner login: ")))
             cap = int(input("Capacity: "))
             img = input("Image: ")
-            port = int(input("Port: "))
+            ports = [int(input("Port: "))]
+            while True:
+                port = input("Another Port (leave blank to exit): ")
+                if not port:
+                    break
+                ports.append(int(port))
             if ask_bool("Process with game creation ?"):
-                lruc(drivers.RDB.create_game(name, user.userid, cap, img, port))
+                lruc(drivers.RDB.create_game(name, user.userid, cap, img, ports))
                 print("Done")
