@@ -37,5 +37,5 @@ $$ LANGUAGE SQL;
 CREATE FUNCTION set_user_admin(arg_userid uuid, value boolean) RETURNS VOID AS $$
     UPDATE tbusers
     SET isadmin = value
-    WHERE userid = arg_xuserid
+    WHERE userid = arg_userid
 $$ LANGUAGE SQL;
