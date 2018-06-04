@@ -13,6 +13,7 @@ env:
   WEBAPI_PULL_ADDRESS="tcp://julien00859.be:22549"
   WEBAPI_PUB_ADDRESS="tcp://julien00859.be:22550"
 script: 
+  - python -m webapi showconfig
   - python -m unittest -v
   - python -m webapi dryrun
 after_success: 
