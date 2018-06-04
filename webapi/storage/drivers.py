@@ -821,7 +821,7 @@ class InMemory(KeyValueStore):
 
         game = await RDB.get_game_by_id(gameid)
         party = Party(gameid, slotid, config.webapi.GAME_HOST,
-                      sorted(sample(range(22500, 23000), len(game.ports))))
+                      sorted(sample(range(23000, 24000), len(game.ports))))
         self.parties[partyid] = party
 
         ensure_future(CTR.create_game(gameid, game, partyid, party))
