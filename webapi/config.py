@@ -45,7 +45,7 @@ class WebAPIConfig(NamedTuple):
     JWT_SECRET: str = "super-secret-password"
     JWT_EXPIRATION_TIME: str = "12h"
     LOG_LEVEL: str = "WARNING"
-    PRODUCTION: Union[strtobool, bool] = False
+    PRODUCTION: Union[lambda v: bool(strtobool(v)), bool] = False
     REVERSE_PROXY_IPS: Optional[List[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]]] = None
     SSL_CERT_PATH: Optional[str] = None
     SSL_KEY_PATH: Optional[str] = None
@@ -54,6 +54,7 @@ class WebAPIConfig(NamedTuple):
     MSQQUEUES_URL: str = "http://localhost:22548/v1/msgqueues"
     PULL_ADDRESS: str = "tcp://127.0.0.1:22549"
     PUB_ADDRESS: str = "tcp://127.0.0.1:22550"
+    GAME_HOST: str = "localhost"
 
 
 postgres: "PostgresConfig"

@@ -30,6 +30,7 @@ setup(
     ],
     packages=find_packages(exclude=['contrib', 'docs', 'tests']),
     install_requires=[
+          "aiozmq",
           "aioredis",
           "asyncpg",
           "pyjwt",
@@ -42,3 +43,4 @@ setup(
         'test': ['pylint', 'coverage', 'codecov', 'aiohttp'],
     },
 )
+

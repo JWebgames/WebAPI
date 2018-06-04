@@ -74,3 +74,6 @@ class WrongGroupState(GroupError):
             super().__init__(self, "Current: {}. Require: {}".format(
                 current.name, wanted.name
             ))
+
+class PartyDoesntExist(GroupError):
+    pass

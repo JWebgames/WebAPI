@@ -42,7 +42,7 @@ def cast(val, typ, *types):
         return values
 
     # cast
-    types = list(types) + [typ]
+    types = [typ] + list(types)
     for typ in types:
         try:
             return typ(val)

@@ -4,18 +4,17 @@ CREATE TABLE tbgames (
     ownerid uuid NOT NULL,
     capacity smallint NOT NULL,
     image varchar(36) NOT NULL UNIQUE,
-    port int NOT NULL,
+    ports int ARRAY NOT NULL,
 
-    CONSTRAINT chk_port CHECK(port >= 0 AND port < 65536),
     CONSTRAINT fk_ownerid FOREIGN KEY (ownerid)
         REFERENCES tbusers
         ON UPDATE CASCADE
         ON DELETE RESTRICT
 );
 
-CREATE FUNCTION create_game(name varchar(24), ownerid uuid, capacity smallint, image varchar(36), port int) RETURNS smallint AS $$
-    INSERT INTO tbgames (name, ownerid, capacity, image, port)
-    VALUES (name, ownerid, capacity, image, port)
+CREATE FUNCTION create_game(name varchar(24), ownerid uuid, capacity smallint, image varchar(36), ports int ARRAY) RETURNS smallint AS $$
+    INSERT INTO tbgames (name, ownerid, capacity, image, ports)
+    VALUES (name, ownerid, capacity, image, ports)
     RETURNING gameid
 $$ LANGUAGE SQL;
 

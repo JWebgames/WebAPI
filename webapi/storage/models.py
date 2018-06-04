@@ -77,13 +77,18 @@ class Game(jsonable):
     image: str
     port: int
 
-    def __init__(self, gameid, name, ownerid, capacity, image, port):
+    def __init__(self, gameid, name, ownerid, capacity, image, ports):
         self.gameid = int(gameid)
         self.name = name
         self.ownerid = ownerid if isinstance(ownerid, UUID) else UUID(ownerid)
         self.capacity = int(capacity)
         self.image = image
-        self.port = int(port)
+        if isinstance(ports, Iterable):
+            self.ports = list(map(int, ports))
+        else:
+            self.ports = [int(ports)]
+
+        
 
 
 class Group(jsonable):
@@ -122,10 +127,16 @@ class Slot(jsonable):
 
 
 class Party(jsonable):
+    gameid: UUID
     slotid: UUID
+    host: str
+    ports: List[int]
 
-    def __init__(self, slotid):
+    def __init__(self, gameid, slotid, host, ports):
+        self.gameid = gameid
         self.slotid = slotid
+        self.host = host
+        self.ports = ports
 
 
 class Message(NamedTuple):
