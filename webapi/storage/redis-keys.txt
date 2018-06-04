@@ -13,4 +13,7 @@ queues:<gameid> => List[slotit]
 slots:<slotid>:players => Set[userid]
 slots:<slotid>:groups => Set[groupid]
 
+parties:<partyid>:gameid => gameid
 parties:<partyid>:slotid => slotid
+parties:<partyid>:host => host_address
+parties:<partyid>:ports => Set[port_number]
