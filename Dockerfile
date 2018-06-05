@@ -1,5 +1,6 @@
 FROM python:3.6
 
+RUN apt install libzmq3-dev
 RUN mkdir -p /usr/src/app
 WORKDIR /usr/src/app
 COPY . /usr/src/app
