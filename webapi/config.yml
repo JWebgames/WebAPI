@@ -4,18 +4,14 @@ messager:
   PUB_ADDRESS: tcp://127.0.0.1:22550
   PULL_ADDRESS: tcp://127.0.0.1:22549
 postgres:
-  DATABASE: null
-  DSN: null
   HOST: /var/run/postgresql/.s.PGSQL.5432
-  PASSWORD: null
   PORT: null
   USER: null
-redis:
   DATABASE: null
-  DSN: /var/run/redis/redis.sock
-  HOST: null
   PASSWORD: null
-  PORT: null
+redis:
+  DSN: /var/run/redis/redis.sock
+  PASSWORD: null
 webapi:
   GAME_HOST: localhost
   GAME_PORT_RANGE_START: 23000
@@ -28,8 +24,6 @@ webapi:
   MSQQUEUES_URL: http://localhost:22548/v1/msgqueues
   PORT: 22548
   PRODUCTION: false
-  REVERSE_PROXY_IPS: null
   SSL_CERT_PATH: null
   SSL_KEY_PASS: null
   SSL_KEY_PATH: null
-

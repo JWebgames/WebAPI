@@ -28,7 +28,7 @@ OUTPUT = """+------------------------------cli:webapi---------------------------
 +-----------------------------env:postgres-----------------------------+
 | HOST                             |                       192.168.0.2 |
 +------------------------------env:redis-------------------------------+
-| HOST                             |                       192.168.0.1 |
+| DSN                              |        redis://192.168.0.1:6379/0 |
 +------------------------------yml:docker------------------------------+
 | HOST                             |       unix:///var/run/docker.sock |
 +-----------------------------yml:messager-----------------------------+
@@ -42,11 +42,8 @@ OUTPUT = """+------------------------------cli:webapi---------------------------
 | PORT                             |                              None |
 | USER                             |                              None |
 +------------------------------yml:redis-------------------------------+
-| DATABASE                         |                              None |
 | DSN                              |         /var/run/redis/redis.sock |
-| HOST                             |                              None |
 | PASSWORD                         |                              None |
-| PORT                             |                              None |
 +------------------------------yml:webapi------------------------------+
 | HOST                             |                         localhost |
 | JWT_EXPIRATION_TIME              |                               12h |
@@ -54,7 +51,6 @@ OUTPUT = """+------------------------------cli:webapi---------------------------
 | LOG_LEVEL                        |                           WARNING |
 | PORT                             |                             22548 |
 | PRODUCTION                       |                             False |
-| REVERSE_PROXY_IPS                |                              None |
 | SSL_CERT_PATH                    |                              None |
 | SSL_KEY_PATH                     |                              None |
 | SSL_KEY_PASS                     |                              None |
@@ -72,7 +68,6 @@ OUTPUT = """+------------------------------cli:webapi---------------------------
 | JWT_EXPIRATION_TIME              |                               12h |
 | LOG_LEVEL                        |                             DEBUG |
 | PRODUCTION                       |                             False |
-| REVERSE_PROXY_IPS                |                              None |
 | SSL_CERT_PATH                    |                              None |
 | SSL_KEY_PATH                     |                              None |
 | SSL_KEY_PASS                     |                              None |
@@ -87,17 +82,13 @@ OUTPUT = """+------------------------------cli:webapi---------------------------
 +----------------------------merged:docker-----------------------------+
 | HOST                             |       unix:///var/run/docker.sock |
 +---------------------------merged:postgres----------------------------+
-| DSN                              |                              None |
 | HOST                             |                       192.168.0.3 |
 | PORT                             |                              None |
 | USER                             |                              None |
 | DATABASE                         |                              None |
 | PASSWORD                         |                              None |
 +-----------------------------merged:redis-----------------------------+
-| DSN                              |         /var/run/redis/redis.sock |
-| HOST                             |                       192.168.0.1 |
-| PORT                             |                              None |
-| DATABASE                         |                              None |
+| DSN                              |        redis://192.168.0.1:6379/0 |
 | PASSWORD                         |                              None |
 +----------------------------------------------------------------------+"""
 
@@ -125,7 +116,7 @@ class TestValidateConfig(TestCase):
 
     def test_invalid_option_type_typing(self):
         """Should fail for invalid type (with Union/Optionnal)"""
-        config = ChainMap({"DSN": 5}, self.default_config["postgres"])
+        config = ChainMap({"HOST": 5}, self.default_config["postgres"])
         self.assertRaises(
             ConfigOptionTypeError, validate, "postgres", PostgresConfig, config)
 
@@ -161,7 +152,7 @@ class ConfigIntegrationTest(TestCase):
 
         env = {
             "WEBAPI_LOG_LEVEL": "INFO",
-            "REDIS_HOST": "192.168.0.1",
+            "REDIS_DSN": "redis://192.168.0.1:6379/0",
             "PGHOST": "192.168.0.2"
         }
 

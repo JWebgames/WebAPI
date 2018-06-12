@@ -46,7 +46,6 @@ class WebAPIConfig(NamedTuple):
     JWT_EXPIRATION_TIME: str = "12h"
     LOG_LEVEL: str = "WARNING"
     PRODUCTION: Union[lambda v: bool(strtobool(v)), bool] = False
-    REVERSE_PROXY_IPS: Optional[List[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]]] = None
     SSL_CERT_PATH: Optional[str] = None
     SSL_KEY_PATH: Optional[str] = None
     SSL_KEY_PASS: Optional[str] = None
@@ -73,7 +72,6 @@ postgres: "PostgresConfig"
 @register("postgres", "PG")
 class PostgresConfig(NamedTuple):
     """Postgres configuration block"""
-    DSN: Optional[str] = None
     HOST: Optional[str] = "/var/run/postgresql/.s.PGSQL.5432"
     PORT: Optional[int] = None
     USER: Optional[str] = None
@@ -86,9 +84,6 @@ redis: "RedisConfig"
 class RedisConfig(NamedTuple):
     """Redis configuration block"""
     DSN: Optional[str] = "/var/run/redis/redis.sock"
-    HOST: Optional[str] = None
-    PORT: Optional[int] = None
-    DATABASE: Optional[int] = None
     PASSWORD: Optional[str] = None
 
 

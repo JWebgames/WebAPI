@@ -27,7 +27,6 @@ async def connect_to_postgres(_app, loop):
     """Connect to postgres and expose the connection object"""
     logger.info("Connecting to postgres...")
     postgres = await asyncpg.create_pool(
-        dsn=config.postgres.DSN,
         host=config.postgres.HOST,
         port=config.postgres.PORT,
         user=config.postgres.USER,
@@ -36,40 +35,35 @@ async def connect_to_postgres(_app, loop):
         loop=loop
     )
     drivers.RDB = drivers.Postgres(postgres)
+    logger.info("Connection to postgres established.")
 
 
 async def connect_to_redis(_app, loop):
     """Connect to redis and expose the connection object"""
     logger.info("Connecting to redis...")
-    if config.redis.DSN is not None:
-        redispool = await aioredis.create_pool(
-            address=config.redis.DSN,
-            loop=loop
-        )
-    else:
-        redispool = await aioredis.create_pool(
-            address=(config.redis.HOST, config.redis.PORT),
-            db=config.redis.DATABASE,
-            password=config.redis.PASSWORD,
-            loop=loop
-        )
+    redispool = await aioredis.create_pool(
+        address=config.redis.DSN,
+        password=config.redis.PASSWORD,
+        loop=loop)
     drivers.KVS = drivers.Redis(redispool)
+    logger.info("Connection to redis established.")
 
 
 @app.listener("before_server_start")
 async def connect_to_messager(_app, _loop):
     """Connect to intermediate messager"""
-    logger.info("Connecting to messager...")
+    logger.info("Using ZeroMQ messager...")
     drivers.MSG = drivers.Messager()
 
 
 @app.listener("before_server_start")
 async def start_http_and_docker_client(_app, loop):
     """Create a shared http client"""
-    logger.info("Opening HTTP client...")
+    logger.info("Opening HTTP clients...")
     global http_client
     http_client = ClientSession(loop=loop)
     drivers.CTR = drivers.Docker(aiodocker.Docker())
+    logger.info("Clients opened.")
 
 
 async def disconnect_from_postgres(_app, _loop):

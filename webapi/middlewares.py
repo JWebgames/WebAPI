@@ -23,19 +23,14 @@ logger = getLogger(__name__)
 @app.middleware("request")
 def set_real_ip(req):
     """Replace the actual IP with the real IP of the client"""
-    if config.webapi.REVERSE_PROXY_IPS is None:
+    header_xff = req.headers.get("X-Forwarded-For")
+    if header_xff is not None:
+        req.ip = header_xff.split(", ", 1)[0]
         return
 
-    if ip_address(req.ip) in config.webapi.REVERSE_PROXY_IPS:
-        header_xff = req.headers.get("X-Forwarded-For")
-        if header_xff is not None:
-            req.ip = header_xff.split(", ", 1)[0]
-            return
-
-        header_xri = req.headers.get("X-Real-IP")
-        if header_xri is not None:
-            req.ip = header_xri
-            return
+    header_xri = req.headers.get("X-Real-IP")
+    if header_xri is not None:
+        req.ip = header_xri
 
 @app.exception(WebAPIError)
 def safe_webapi(request, exception):
