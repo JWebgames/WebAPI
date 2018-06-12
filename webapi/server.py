@@ -69,7 +69,7 @@ async def start_http_and_docker_client(_app, loop):
     logger.info("Opening HTTP client...")
     global http_client
     http_client = ClientSession(loop=loop)
-    #drivers.CTR = drivers.Docker(aiodocker.Docker())
+    drivers.CTR = drivers.Docker(aiodocker.Docker())
 
 
 async def disconnect_from_postgres(_app, _loop):
@@ -96,7 +96,7 @@ async def disconnect_from_messager(_app, _loop):
 async def stop_http_and_docket_client(_app, _loop):
     """Close shared http client"""
     logger.info("Closing HTTP client...")
-    #await drivers.CTR.docker.close()
+    await drivers.CTR.docker.close()
     await http_client.close()
 
 

@@ -567,7 +567,7 @@ class Redis(KeyValueStore):
             await self.redis.set(
                 Redis.user_partyid_key.format(userid), partyid)
         
-        await self.redis.lrem(Redis.game_queue_key.format(gameid), slotid)
+        await self.redis.lrem(Redis.game_queue_key.format(gameid), 1, str(slotid))
         
         game = await RDB.get_game_by_id(gameid)
         party = Party(gameid, slotid, config.webapi.GAME_HOST,
