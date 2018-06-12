@@ -106,3 +106,10 @@ venv.bak/
 
 # database
 *.sqlite3
+
+# docker stuff
+docker-compose.yml
+
+# configuration files
+config*.yml
+
