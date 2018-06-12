@@ -260,64 +260,64 @@ class TestMatchMaker(TestCase):
         coro = drivers.KVS.join_queue(groupid)
         self.assertRaises(GroupNotReady, lruc, coro)
 
-class TestMessager(TestCase):
-    """Test case for Messager"""
-    def setUp(self):
-        try:
-            if config.webapi.PRODUCTION:
-                lruc(asyncio.gather(connect_to_postgres(None, loop),
-                                    connect_to_redis(None, loop)))
-            else:
-                drivers.RDB = drivers.SQLite()
-                drivers.KVS = drivers.InMemory()
-            drivers.MSG = drivers.Messager()
+# class TestMessager(TestCase):
+#     """Test case for Messager"""
+#     def setUp(self):
+#         try:
+#             if config.webapi.PRODUCTION:
+#                 lruc(asyncio.gather(connect_to_postgres(None, loop),
+#                                     connect_to_redis(None, loop)))
+#             else:
+#                 drivers.RDB = drivers.SQLite()
+#                 drivers.KVS = drivers.InMemory()
+#             drivers.MSG = drivers.Messager()
 
-            userid = uuid4()
-            lruc(drivers.RDB.create_user(
-                userid, "toto", "toto@example.com", b"suchpasssword"))
-            self.user = lruc(drivers.RDB.get_user_by_id(userid))
-            gameid = lruc(drivers.RDB.create_game(
-                "Shifumi", self.user.userid, 4, "shifumi-server", [22451]))
-            self.game = lruc(drivers.RDB.get_game_by_id(gameid))
-        except:
-            logger.exception("Error in setUp KVS")
+#             userid = uuid4()
+#             lruc(drivers.RDB.create_user(
+#                 userid, "toto", "toto@example.com", b"suchpasssword"))
+#             self.user = lruc(drivers.RDB.get_user_by_id(userid))
+#             gameid = lruc(drivers.RDB.create_game(
+#                 "Shifumi", self.user.userid, 4, "shifumi-server", [22451]))
+#             self.game = lruc(drivers.RDB.get_game_by_id(gameid))
+#         except:
+#             logger.exception("Error in setUp KVS")
 
-    def tearDown(self):
-        try:
-            if config.webapi.PRODUCTION:
-                conn = lruc(drivers.RDB.pool.acquire())
-                lruc(conn.execute("TRUNCATE tbusers CASCADE"))
-                lruc(conn.execute("TRUNCATE tbgames CASCADE"))
-                lruc(drivers.RDB.pool.release(conn))
-                lruc(drivers.KVS.redis.flushdb())
-                lruc(asyncio.gather(disconnect_from_postgres(None, loop),
-                                    disconnect_from_redis(None, loop)))
-            else:
-                drivers.RDB.conn.close()
+#     def tearDown(self):
+#         try:
+#             if config.webapi.PRODUCTION:
+#                 conn = lruc(drivers.RDB.pool.acquire())
+#                 lruc(conn.execute("TRUNCATE tbusers CASCADE"))
+#                 lruc(conn.execute("TRUNCATE tbgames CASCADE"))
+#                 lruc(drivers.RDB.pool.release(conn))
+#                 lruc(drivers.KVS.redis.flushdb())
+#                 lruc(asyncio.gather(disconnect_from_postgres(None, loop),
+#                                     disconnect_from_redis(None, loop)))
+#             else:
+#                 drivers.RDB.conn.close()
             
-            drivers.MSG.close()
+#             drivers.MSG.close()
 
-            self.user = None
-            self.game = None
-        except:
-            logger.exception("Error in tearDown KVS")
+#             self.user = None
+#             self.game = None
+#         except:
+#             logger.exception("Error in tearDown KVS")
     
-    def test_send_recv_messages(self):
-        async def feeder(message):
-            await drivers.MSG.send_message(
-                MsgQueueType.USER, self.user.userid, message)
+#     def test_send_recv_messages(self):
+#         async def feeder(message):
+#             await drivers.MSG.send_message(
+#                 MsgQueueType.USER, self.user.userid, message)
 
-        async def reciever():
-            gen = drivers.MSG.recv_messages(MsgQueueType.USER, self.user.userid)
-            async for sentinel in gen:
-                logger.debug(sentinel)
-                break
-            async for msg in gen:
-                logger.debug(msg)
-                await gen.asend(sentinel)
-            return msg
+#         async def reciever():
+#             gen = drivers.MSG.recv_messages(MsgQueueType.USER, self.user.userid)
+#             async for sentinel in gen:
+#                 logger.debug(sentinel)
+#                 break
+#             async for msg in gen:
+#                 logger.debug(msg)
+#                 await gen.asend(sentinel)
+#             return msg
 
-        payload = {"value": randint(0, 99)}
-        asyncio.get_event_loop().call_later(0.1, asyncio.ensure_future, feeder(payload))
-        self.assertEqual(json.loads(lruc(asyncio.wait_for(reciever(), 0.2))), payload)
+#         payload = {"value": randint(0, 99)}
+#         asyncio.get_event_loop().call_later(0.1, asyncio.ensure_future, feeder(payload))
+#         self.assertEqual(json.loads(lruc(asyncio.wait_for(reciever(), 0.2))), payload)
       
