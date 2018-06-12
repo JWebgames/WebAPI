@@ -29,6 +29,11 @@ OUTPUT = """+------------------------------cli:webapi---------------------------
 | HOST                             |                       192.168.0.2 |
 +------------------------------env:redis-------------------------------+
 | HOST                             |                       192.168.0.1 |
++------------------------------yml:docker------------------------------+
+| HOST                             |       unix:///var/run/docker.sock |
++-----------------------------yml:messager-----------------------------+
+| PUB_ADDRESS                      |             tcp://127.0.0.1:22550 |
+| PULL_ADDRESS                     |             tcp://127.0.0.1:22549 |
 +-----------------------------yml:postgres-----------------------------+
 | DATABASE                         |                              None |
 | DSN                              |                              None |
@@ -58,6 +63,8 @@ OUTPUT = """+------------------------------cli:webapi---------------------------
 | PULL_ADDRESS                     |             tcp://127.0.0.1:22549 |
 | PUB_ADDRESS                      |             tcp://127.0.0.1:22550 |
 | GAME_HOST                        |                         localhost |
+| GAME_PORT_RANGE_START            |                             23000 |
+| GAME_PORT_RANGE_STOP             |                             24000 |
 +----------------------------merged:webapi-----------------------------+
 | HOST                             |                         localhost |
 | PORT                             |                             22548 |
@@ -71,9 +78,14 @@ OUTPUT = """+------------------------------cli:webapi---------------------------
 | SSL_KEY_PASS                     |                              None |
 | GROUP_URL                        |  http://localhost:22548/v1/groups |
 | MSQQUEUES_URL                    | http://localhos...48/v1/msgqueues |
+| GAME_HOST                        |                         localhost |
+| GAME_PORT_RANGE_START            |                             23000 |
+| GAME_PORT_RANGE_STOP             |                             24000 |
++---------------------------merged:messager----------------------------+
 | PULL_ADDRESS                     |             tcp://127.0.0.1:22549 |
 | PUB_ADDRESS                      |             tcp://127.0.0.1:22550 |
-| GAME_HOST                        |                         localhost |
++----------------------------merged:docker-----------------------------+
+| HOST                             |       unix:///var/run/docker.sock |
 +---------------------------merged:postgres----------------------------+
 | DSN                              |                              None |
 | HOST                             |                       192.168.0.3 |

@@ -571,7 +571,9 @@ class Redis(KeyValueStore):
         
         game = await RDB.get_game_by_id(gameid)
         party = Party(gameid, slotid, config.webapi.GAME_HOST,
-                      sorted(sample(range(22500, 23000), len(game.ports))))
+                      sorted(sample(range(config.webapi.GAME_PORT_RANGE_START,
+                                          config.webapi.GAME_PORT_RANGE_STOP),
+                                    len(game.ports))))
         await self.redis.set(
             Redis.party_gameid_key.format(partyid), str(party.gameid))
         await self.redis.set(
@@ -821,7 +823,9 @@ class InMemory(KeyValueStore):
 
         game = await RDB.get_game_by_id(gameid)
         party = Party(gameid, slotid, config.webapi.GAME_HOST,
-                      sorted(sample(range(23000, 24000), len(game.ports))))
+                      sorted(sample(range(config.webapi.GAME_PORT_RANGE_START,
+                                          config.webapi.GAME_PORT_RANGE_STOP),
+                                    len(game.ports))))
         self.parties[partyid] = party
 
         ensure_future(CTR.create_game(gameid, game, partyid, party))
@@ -851,9 +855,9 @@ class Messager:
     def __init__(self):
         self.context = zmq.asyncio.Context()
         self.pusher = self.context.socket(zmq.PUSH)
-        self.pusher.connect(config.webapi.PULL_ADDRESS)
+        self.pusher.connect(config.messager.PULL_ADDRESS)
         logger.debug("Connected to messager puller running on %s",
-                     config.webapi.PULL_ADDRESS)
+                     config.messager.PULL_ADDRESS)
 
     async def send_message(self, queue, id_, payload):
         """PUSH a message to be PUB by the Messager"""
@@ -864,9 +868,9 @@ class Messager:
         """SUB to messages PUB by th Message"""
         sub_pattern = "{}:{!s}".format(queue.value, id_)
         suber = self.context.socket(zmq.SUB)
-        suber.connect(config.webapi.PUB_ADDRESS)
+        suber.connect(config.messager.PUB_ADDRESS)
         logger.debug("Connected to messager publisher running on %s",
-                     config.webapi.PUB_ADDRESS)
+                     config.messager.PUB_ADDRESS)
         suber.setsockopt_string(zmq.SUBSCRIBE, sub_pattern)
         logger.debug("Recieving message for pattern %s",
                      sub_pattern)
