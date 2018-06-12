@@ -3,11 +3,15 @@ python:
   - "3.6"
 before_install:
   - sudo apt install libyaml-dev
-  - echo "deb http://download.opensuse.org/repositories/network:/messaging:/zeromq:/release-stable/Debian_9.0/ ./" | sudo tee -a /etc/apt/sources.list
-  - wget https://download.opensuse.org/repositories/network:/messaging:/zeromq:/release-stable/Debian_9.0/Release.key -O- | sudo apt-key add
-  - sudo apt update
-  - sudo apt install libzmq5
-  - sudo apt install libzmq3-dev
+  - wget http://download.zeromq.org/zeromq-4.0.5.tar.gz
+  - tar xvzf zeromq-4.0.5.tar.gz
+  - sudo apt-get update
+  - sudo apt-get install -y libtool pkg-config build-essential autoconf automake uuid-dev
+  - cd zeromq-4.0.5
+  - ./configure
+  - sudo make install
+  - sudo ldconfig
+  - cd ..
 install:
   - pip install -r requirements.txt
   - pip install -r requirements_test.txt
