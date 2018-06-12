@@ -6,15 +6,14 @@ import logging
 import ssl
 from argparse import ArgumentParser
 from functools import partial
-from getpass import getpass
 from sys import argv, exit as sysexit
-from asyncpg.exceptions import PostgresConnectionError, InvalidAuthorizationSpecificationError
 from . import config
 from .exceptions import ConfigError
-from .tools import DelayLogFor, ask_bool
+from .tools import DelayLogFor
 
 
 def setup():
+    """Setup logging and load configuration"""
     logging.root.level = logging.NOTSET
     logging.addLevelName(45, "SECURITY")
 
@@ -41,23 +40,29 @@ def setup():
 
 dispatcher = {}
 def register(func):
+    """Register function to dispatcher"""
     dispatcher[func.__name__] = func
     return func
 
 @register
 def showconfig():
+    """Show current configuration and exit"""
     config.show()
     sysexit(0)
 
 @register
 def exportconfig():
+    """Show default configuration and exit"""
     config.export_default_config()
     sysexit(0)
-    
+
 @register
 def run():
+    """Start foreground server"""
     setup()
     from . import server
+    server.prepare_web_server()
+
     ssl_context = None
     if config.webapi.SSL_KEY_PATH and config.webapi.SSL_CERT_PATH:
         ssl_context = ssl.create_default_context(
@@ -67,7 +72,7 @@ def run():
             config.webapi.SSL_KEY_PATH,
             config.webapi.SSL_KEY_PASS)
 
-    server.app.run(
+    server.APP.run(
         host=config.webapi.HOST,
         port=config.webapi.PORT,
         debug=not config.webapi.PRODUCTION,
@@ -76,8 +81,10 @@ def run():
 
 @register
 def dryrun():
+    """Load server and exit"""
     setup()
     from . import server
+    server.prepare_web_server()
     loop = asyncio.get_event_loop()
     future = asyncio.gather(server.connect_to_postgres(None, loop),
                             server.connect_to_redis(None, loop))
@@ -92,6 +99,7 @@ def dryrun():
 
 @register
 def wizard():
+    """Start a CLI wizard to help configure the databases"""
     setup()
     from . import admin
     admin.wizard()

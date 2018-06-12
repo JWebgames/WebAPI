@@ -1,13 +1,13 @@
 """Several tools used accross by other modules"""
 
 import logging
+from logging.handlers import BufferingHandler
+from asyncio import sleep, get_event_loop
 from datetime import datetime, timedelta
 from distutils.util import strtobool
-from logging.handlers import BufferingHandler
 from os.path import abspath, dirname
 from typing import Union, Optional, List
 from uuid import uuid4
-from asyncio import sleep, get_event_loop
 import jwt as jwtlib
 
 logger = logging.getLogger(__name__)
@@ -127,18 +127,23 @@ def ask_bool(prompt):
 
 
 def fake_async(func):
+    """Fake coroutine by awaiting asyncio.sleep(0)"""
     async def wrapped(*args, **kwargs):
+        """The faked coroutine"""
         await sleep(0)
         return func(*args, **kwargs)
     return wrapped
 
 
 def lruc(coro, loop=get_event_loop()):
+    """Short version of loop.run_until_complete(coro)"""
     return loop.run_until_complete(coro)
 
 
 def async_partial(func, *args, **keywords):
+    """async functools.partial"""
     async def newfunc(*fargs, **fkeywords):
+        """the mocked function"""
         newkeywords = keywords.copy()
         newkeywords.update(fkeywords)
         return await func(*args, *fargs, **newkeywords)
@@ -146,3 +151,16 @@ def async_partial(func, *args, **keywords):
     newfunc.args = args
     newfunc.keywords = keywords
     return newfunc
+
+class Ref:
+    _obj = None
+    def __call__(self, obj):
+        self._obj = obj
+
+    def __getattr__(self, attr):
+        return getattr(self._obj, attr)
+
+    def __setattr__(self, attr, value):
+        if attr == "_obj":
+            super().__setattr__(attr, value)
+        return setattr(self._obj, attr, value)

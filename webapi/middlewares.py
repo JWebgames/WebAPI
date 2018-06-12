@@ -2,25 +2,25 @@
 request/response in order to parse/validate/modify/... them"""
 
 from functools import wraps
-from ipaddress import ip_address
 from logging import getLogger
 from sqlite3 import IntegrityError as SQLiteIntegrityError
-import jwt as jwtlib
 from asyncpg.exceptions import IntegrityConstraintViolationError as PostgresIntegrityError
 from sanic.exceptions import SanicException,\
                              InvalidUsage,\
                              Unauthorized,\
                              Forbidden
 from sanic.response import json
-from .storage import drivers
+import jwt as jwtlib
+
 from . import config
-from .server import app
+from .server import APP
+from .storage import drivers
 from .exceptions import WebAPIError
 from .storage.models import ClientType
 
 logger = getLogger(__name__)
 
-@app.middleware("request")
+@APP.middleware("request")
 def set_real_ip(req):
     """Replace the actual IP with the real IP of the client"""
     header_xff = req.headers.get("X-Forwarded-For")
@@ -32,7 +32,7 @@ def set_real_ip(req):
     if header_xri is not None:
         req.ip = header_xri
 
-@app.exception(WebAPIError)
+@APP.exception(WebAPIError)
 def safe_webapi(request, exception):
     """
     Escape API exceptions
@@ -41,11 +41,11 @@ def safe_webapi(request, exception):
     contained in the 'error' field.
     """
     logger.log(45, "Impossible action on normal use (IP: %s)",
-                   request.ip, exc_info=True)
+               request.ip, exc_info=True)
     return json({"error": str(exception)}, 400)
 
 
-@app.exception(SanicException)
+@APP.exception(SanicException)
 def safe_http(request, exception):
     """
     Escape sanic exceptions
@@ -57,7 +57,7 @@ def safe_http(request, exception):
     return json({"error": str(exception)}, exception.status_code)
 
 
-@app.exception(SQLiteIntegrityError, PostgresIntegrityError)
+@APP.exception(SQLiteIntegrityError, PostgresIntegrityError)
 def safe_sql(request, exception):
     """
     Escape postgres integrity violation
@@ -81,26 +81,32 @@ def authenticate(allowed_client_types: set):
             """
             bearer = req.headers.get("Authorization")
             if not bearer:
-                logger.warning(f"Authorization header is missing (IP: {req.ip})")
+                logger.warning("Authorization header is missing (IP: %s)",
+                               req.ip)
                 raise Unauthorized("Authorization header required")
 
             if not bearer.startswith("Bearer:"):
-                logger.warning(f"Wrong authorization header type (IP: {req.ip})")
+                logger.warning("Wrong authorization header type (IP: %s)",
+                               req.ip)
                 raise Unauthorized("Bearer authorization type required")
 
             try:
-                jwt = jwtlib.decode(bearer[7:].strip(), config.webapi.JWT_SECRET, algorithms=['HS256'])
+                jwt = jwtlib.decode(bearer[7:].strip(),
+                                    config.webapi.JWT_SECRET,
+                                    algorithms=['HS256'])
             except jwtlib.exceptions.InvalidTokenError as exc:
-                logger.log(45, f"Invalid token (IP: {req.ip})")
+                logger.log(45, "Invalid token (IP: %s)", req.ip)
                 raise Forbidden("Invalid token") from exc
 
             if await drivers.KVS.is_token_revoked(jwt["jti"]):
-                logger.log(45, f"Token has been revoked (IP: {req.ip})")
+                logger.log(45, "Token has been revoked (IP: %s)", req.ip)
                 raise Forbidden("Revoked token")
 
             if ClientType(jwt["typ"]) not in allowed_client_types:
                 logger.log(45, 'Restricted access: "%s" not in {%s} (IP: %s)',
-                           jwt["typ"], ", ".join(map(str, allowed_client_types)), req.ip)
+                           jwt["typ"],
+                           ", ".join(map(str, allowed_client_types)),
+                           req.ip)
                 raise Forbidden("Restricted access")
 
             return await func(req, *args, **kwargs, jwt=jwt)
@@ -133,9 +139,9 @@ def require_fields(fields: set):
             if missing_keys:
                 raise InvalidUsage(template.format(", ".join(missing_keys)))
             missing_values = [key for key in (req.json.keys() & fields)
-                              if req.json[key] is None 
-                                 or (type(req.json[key]) is str
-                                     and not req.json[key].strip())]
+                              if (req.json[key] is None
+                                  or (isinstance(req.json[key], str)
+                                      and not req.json[key].strip()))]
             if missing_values:
                 raise InvalidUsage(template.format(", ".join(missing_values)))
             return await func(req, *args, **req.json, **kwargs)
