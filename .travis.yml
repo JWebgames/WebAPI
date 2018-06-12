@@ -6,6 +6,7 @@ before_install:
   - echo "deb http://download.opensuse.org/repositories/network:/messaging:/zeromq:/release-stable/Debian_9.0/ ./" | sudo tee -a /etc/apt/sources.list
   - wget https://download.opensuse.org/repositories/network:/messaging:/zeromq:/release-stable/Debian_9.0/Release.key -O- | sudo apt-key add
   - sudo apt update
+  - sudo apt install libzmq5
   - sudo apt install libzmq3-dev
 install:
   - pip install -r requirements.txt
