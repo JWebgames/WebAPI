@@ -1,35 +1,35 @@
+docker:
+  HOST: unix:///var/run/docker.sock
+messager:
+  PUB_ADDRESS: tcp://127.0.0.1:22550
+  PULL_ADDRESS: tcp://127.0.0.1:22549
 postgres:
+  DATABASE: null
   DSN: null
-  HOST: 192.168.0.252
+  HOST: /var/run/postgresql/.s.PGSQL.5432
+  PASSWORD: null
   PORT: null
-  USER: webgames
-  PASSWORD: agHDTix4SKkrdo9aqfyd
-  DATABASE: webapi
+  USER: null
 redis:
-  DSN: null
-  HOST: 192.168.0.252
-  PORT: 6379 
-  PASSWORD: 2p9ta0WWLIkHzOlSh6NO
-  DATABASE: 0
+  DATABASE: null
+  DSN: /var/run/redis/redis.sock
+  HOST: null
+  PASSWORD: null
+  PORT: null
 webapi:
-  HOST: 0.0.0.0
-  JWT_EXPIRATION_TIME: 12h
-  JWT_SECRET: egTGLPwxuuy3lLbyz8i4KA
-  LOG_LEVEL: DEBUG
-  PORT: 22548
-  PRODUCTION: true
-  REVERSE_PROXY_IPS:
-    - 192.168.0.252
-  SSL_CERT_PATH: null
-  SSL_KEY_PATH: null
-  SSL_KEY_PASS: null
-  GROUP_URL: http://localhost:22548/v1/groups
-  MSQQUEUES_URL: http://localhost:22548/v1/msgqueues
-  GAME_HOST: 85.201.34.147
+  GAME_HOST: localhost
   GAME_PORT_RANGE_START: 23000
   GAME_PORT_RANGE_STOP: 24000
-messager:
-  PULL_ADDRESS: tcp://192.168.0.252:22549
-  PUB_ADDRESS: tcp://192.168.0.252:22550
-docker:
-  HOST: tcp://192.168.0.252:38330
+  GROUP_URL: http://localhost:22548/v1/groups
+  HOST: localhost
+  JWT_EXPIRATION_TIME: 12h
+  JWT_SECRET: super-secret-password
+  LOG_LEVEL: WARNING
+  MSQQUEUES_URL: http://localhost:22548/v1/msgqueues
+  PORT: 22548
+  PRODUCTION: false
+  REVERSE_PROXY_IPS: null
+  SSL_CERT_PATH: null
+  SSL_KEY_PASS: null
+  SSL_KEY_PATH: null
+
