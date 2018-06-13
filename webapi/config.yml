@@ -21,7 +21,7 @@ webapi:
   JWT_EXPIRATION_TIME: 12h
   JWT_SECRET: super-secret-password
   LOG_LEVEL: WARNING
-  MSQQUEUES_URL: http://localhost:22548/v1/msgqueues
+  MSGQUEUES_URL: http://localhost:22548/v1/msgqueues
   PORT: 22548
   PRODUCTION: false
   SSL_CERT_PATH: null

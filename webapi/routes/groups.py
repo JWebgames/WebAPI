@@ -118,7 +118,7 @@ async def do_leave(userid, username):
 
     # Kick user from group stream
     url = "{}/kick/{}/from/{}".format(
-        config.webapi.MSQQUEUES_URL, userid, MsgQueueType.GROUP.value)
+        config.webapi.MSGQUEUES_URL, userid, MsgQueueType.GROUP.value)
     headers = {"Authorization": "Bearer: %s" % \
                generate_token(config.webapi.JWT_SECRET,
                               typ=ClientType.ADMIN.value)}
