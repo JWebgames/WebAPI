@@ -12,7 +12,7 @@ class JSONable:
         """Return the inner __dict__ converted to json-friendly python dict"""
         dict_ = self.__dict__.copy()
         for key, value in dict_.items():
-            if not isinstance(value, bytes, str) and isinstance(value, Iterable):
+            if not isinstance(value, (bytes, str)) and isinstance(value, Iterable):
                 for idx, sub_value in enumerate(value.copy()):
                     if isinstance(sub_value, UUID):
                         dict_[key][idx] = str(sub_value)
