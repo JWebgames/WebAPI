@@ -101,10 +101,10 @@ async def leave(_req, jwt):
 
 @bp.route("/kick/<userid>", methods=["DELETE"])
 @authenticate({ClientType.ADMIN})
-async def kick(_req, userid, _jwt):
+async def kick(_req, userid, jwt):
     """Kick a player out of his group"""
     try:
-        return await do_leave(userid, None)
+        await do_leave(userid, None)
     except PlayerNotInGroup:
         logger.warning("Cannot kick a player who is not in a group")
     except WrongGroupState:
