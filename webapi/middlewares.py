@@ -20,18 +20,6 @@ from .storage.models import ClientType
 
 logger = getLogger(__name__)
 
-@APP.middleware("request")
-def set_real_ip(req):
-    """Replace the actual IP with the real IP of the client"""
-    header_xff = req.headers.get("X-Forwarded-For")
-    if header_xff is not None:
-        req.ip = header_xff.split(", ", 1)[0]
-        return
-
-    header_xri = req.headers.get("X-Real-IP")
-    if header_xri is not None:
-        req.ip = header_xri
-
 @APP.exception(WebAPIError)
 def safe_webapi(request, exception):
     """
