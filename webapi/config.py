@@ -50,7 +50,7 @@ class WebAPIConfig(NamedTuple):
     SSL_KEY_PATH: Optional[str] = None
     SSL_KEY_PASS: Optional[str] = None
     GROUP_URL: str = "http://localhost:22548/v1/groups"
-    MSQQUEUES_URL: str = "http://localhost:22548/v1/msgqueues"
+    MSGQUEUES_URL: str = "http://localhost:22548/v1/msgqueues"
     GAME_HOST: str = "localhost"
     GAME_PORT_RANGE_START: int = 23000
     GAME_PORT_RANGE_STOP: int = 24000

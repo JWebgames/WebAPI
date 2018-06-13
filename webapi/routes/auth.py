@@ -70,7 +70,7 @@ async def logout(_req, jwt):
 
     # Kick user from user stream
     url = "{}/kick/{}/from/{}".format(
-        config.webapi.MSQQUEUES_URL, jwt["uid"], MsgQueueType.USER.value)
+        config.webapi.MSGQUEUES_URL, jwt["uid"], MsgQueueType.USER.value)
     headers = {"Authorization": "Bearer: %s" % \
                generate_token(config.webapi.JWT_SECRET,
                               typ=ClientType.ADMIN.value)}
