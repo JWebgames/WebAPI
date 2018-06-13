@@ -126,7 +126,7 @@ async def get_party_msg(_req, jwt):
 
 @bp.route("/kick/<userid>/from/<queue>", methods=["DELETE"])
 @authenticate({ClientType.ADMIN})
-async def kick_user(_req, queue, userid, _jwt):
+async def kick_user(_req, queue, userid, jwt):
     """Close stream"""
     logger.info("Kicking user %s from queue %s", userid, queue)
     for event in stop_events[queue][userid].copy():

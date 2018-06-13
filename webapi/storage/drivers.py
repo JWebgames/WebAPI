@@ -828,7 +828,7 @@ class InMemory(KeyValueStore):
                                     len(game.ports))))
         self.parties[partyid] = party
 
-        ensure_future(CTR.launch(gameid, game, partyid, party))
+        ensure_future(CTR.launch_game(gameid, game, partyid, party))
 
     @fake_async
     def get_party(self, partyid):

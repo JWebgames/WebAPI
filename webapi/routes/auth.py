@@ -13,7 +13,7 @@ import jwt as jwtlib
 from .. import config
 from ..middlewares import authenticate, require_fields
 from ..server import RDB, KVS, HTTP
-from ..storage.models import ClientType
+from ..storage.models import ClientType, MsgQueueType
 from ..exceptions import NotFoundError
 from ..tools import generate_token
 
@@ -67,6 +67,19 @@ async def login_(req, login, password):
 async def logout(_req, jwt):
     """Disconnect a user by invalidating his JWT"""
     await KVS.revoke_token(jwt)
+
+    # Kick user from user stream
+    url = "{}/kick/{}/from/{}".format(
+        config.webapi.MSQQUEUES_URL, jwt["uid"], MsgQueueType.USER.value)
+    headers = {"Authorization": "Bearer: %s" % \
+               generate_token(config.webapi.JWT_SECRET,
+                              typ=ClientType.ADMIN.value)}
+    async with HTTP.delete(url, headers=headers) as res:
+        if res.status != 204:
+            logger.error("Error calling url %s: %s %s",
+                         url, res.status, res.reason)
+
+    # Kick user out of his group
     url = "{}/kick/{}".format(config.webapi.GROUP_URL, jwt["uid"])
     headers = {"Authorization": "Bearer: %s" % \
                generate_token(config.webapi.JWT_SECRET,
