@@ -94,7 +94,8 @@ async def get_user_msg(_req, jwt):
     return stream(async_partial(stream_until_event_is_set,
                                 userid=jwt["uid"],
                                 queue=MsgQueueType.USER,
-                                queueid=jwt["uid"]))
+                                queueid=jwt["uid"]),
+                  headers={"X-Accel-Buffering": "no"})
 
 @bp.route("/group", methods=["GET"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
@@ -108,7 +109,8 @@ async def get_group_msg(_req, jwt):
     return stream(async_partial(stream_until_event_is_set,
                                 userid=jwt["uid"],
                                 queue=MsgQueueType.GROUP,
-                                queueid=str(user.groupid)))
+                                queueid=str(user.groupid)),
+                  headers={"X-Accel-Buffering": "no"})
 
 @bp.route("/party", methods=["GET"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
@@ -122,7 +124,8 @@ async def get_party_msg(_req, jwt):
     return stream(async_partial(stream_until_event_is_set,
                                 userid=jwt["uid"],
                                 queue=MsgQueueType.PARTY,
-                                queueid=str(user.partyid)))
+                                queueid=str(user.partyid)),
+                  headers={"X-Accel-Buffering": "no"})
 
 @bp.route("/kick/<userid>/from/<queue>", methods=["DELETE"])
 @authenticate({ClientType.ADMIN})
