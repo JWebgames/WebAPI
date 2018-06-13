@@ -1,7 +1,7 @@
 """Test runner for config module"""
 
 import warnings
-from asyncio import coroutine, get_event_loop
+from asyncio import coroutine
 from datetime import datetime, timedelta
 from logging import getLogger
 from secrets import token_urlsafe
@@ -15,9 +15,9 @@ from jwt import decode as jwt_decode
 
 from webapi.tools import generate_token
 from webapi.config import webapi
-from webapi.server import app
+from webapi.server import APP, KVS
 from webapi.middlewares import authenticate, require_fields
-from webapi.storage import drivers
+from webapi.storage.drivers import InMemory
 from webapi.storage.models import ClientType
 
 logger = getLogger(__name__)
@@ -33,27 +33,27 @@ EXPIRED_JWT = generate_token(webapi.JWT_SECRET,
 WRONG_KEY_JWT = generate_token("wrong-super-secret-password")
 REVOKED_JWT = generate_token(webapi.JWT_SECRET)
 
-@app.route("/tests/http_error")
+@APP.route("/tests/http_error")
 def raise_http_error(_req):
     """Raise a http error"""
     raise InvalidUsage(ERROR_MESSAGE_1)
 
 
-@app.route("/tests/sql_error")
+@APP.route("/tests/sql_error")
 def raise_sql_error(_req):
     """Raise a sql error"""
     raise IntegrityError(ERROR_MESSAGE_2)
 
 
-@app.route("/tests/disco", methods=["DELETE"])
+@APP.route("/tests/disco", methods=["DELETE"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
 @coroutine
 def require_auth(_req, jwt):
     """Return an empty json, require authentication"""
-    yield from drivers.KVS.revoke_token(jwt)
+    yield from KVS.revoke_token(jwt)
     return json({})
 
-@app.route("/tests/auth")
+@APP.route("/tests/auth")
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
 @coroutine
 def require_auth(_req, jwt):
@@ -61,14 +61,14 @@ def require_auth(_req, jwt):
     return json({})
 
 
-@app.route("/tests/admin_auth")
+@APP.route("/tests/admin_auth")
 @authenticate({ClientType.ADMIN})
 @coroutine
 def require_auth_admin(_req, jwt):
     """Return an empty json, require admin authentication"""
     return json({})
 
-@app.route("/tests/fields", methods=["POST"])
+@APP.route("/tests/fields", methods=["POST"])
 @require_fields({"field1", "field2"})
 @coroutine
 def route_require_fields(_req, field1, field2):
@@ -82,7 +82,7 @@ class TestExceptions(TestCase):
         """Test safe_http against SanicException"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            _, res = app.test_client.get("/tests/http_error")
+            _, res = APP.test_client.get("/tests/http_error")
         self.assertEqual(res.status, 400)
         self.assertEqual(res.headers["content-type"], "application/json")
         self.assertIn("error", res.json)
@@ -92,19 +92,22 @@ class TestExceptions(TestCase):
         """Test safe_sql against IntegrityConstraintViolationError"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            _, res = app.test_client.get("/tests/sql_error")
+            _, res = APP.test_client.get("/tests/sql_error")
         self.assertEqual(res.status, 400)
         self.assertEqual(res.headers["content-type"], "application/json")
         self.assertIn("error", res.json)
         self.assertEqual(res.json["error"], ERROR_MESSAGE_2)
 
 class TestAuthenticate(TestCase):
+    def setUp(self):
+        KVS(InMemory())
+ 
     """Test case for middlewares.authenticate"""
     def test_valid_token(self):
         """Valid token has access"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            _, res = app.test_client.get("/tests/auth", headers={
+            _, res = APP.test_client.get("/tests/auth", headers={
                 "Authorization": "Bearer: %s" % PLAYER_JWT
             })
         self.assertEqual(res.status, 200)
@@ -113,7 +116,7 @@ class TestAuthenticate(TestCase):
         """Fail if authorization header is missing"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            _, res = app.test_client.get("/tests/auth")
+            _, res = APP.test_client.get("/tests/auth")
         self.assertEqual(res.json["error"], "Authorization header required")
         self.assertEqual(res.status, 401)
 
@@ -121,7 +124,7 @@ class TestAuthenticate(TestCase):
         """Fail if authorization header is not Bearer"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            _, res = app.test_client.get("/tests/auth", headers={
+            _, res = APP.test_client.get("/tests/auth", headers={
                 "Authorization": PLAYER_JWT
             })
         self.assertEqual(res.json["error"], "Bearer authorization type required")
@@ -131,7 +134,7 @@ class TestAuthenticate(TestCase):
         """Fail if token is expirated (JWT:EXP)"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            _, res = app.test_client.get("/tests/auth", headers={
+            _, res = APP.test_client.get("/tests/auth", headers={
                 "Authorization": "Bearer: %s" % EXPIRED_JWT
             })
         self.assertEqual(res.json["error"], "Invalid token")
@@ -141,7 +144,7 @@ class TestAuthenticate(TestCase):
         """Fail if the token is signed with a wrong key"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            _, res = app.test_client.get("/tests/auth", headers={
+            _, res = APP.test_client.get("/tests/auth", headers={
                 "Authorization": "Bearer: %s" % WRONG_KEY_JWT
             })
         self.assertEqual(res.json["error"], "Invalid token")
@@ -151,7 +154,7 @@ class TestAuthenticate(TestCase):
         """Fail if access is restricted"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            _, res = app.test_client.get("/tests/admin_auth", headers={
+            _, res = APP.test_client.get("/tests/admin_auth", headers={
                 "Authorization": "Bearer: %s" % PLAYER_JWT
             })
         self.assertEqual(res.json["error"], "Restricted access")
@@ -161,7 +164,7 @@ class TestAuthenticate(TestCase):
         """Pass if access is not restricted"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            _, res = app.test_client.get("/tests/admin_auth", headers={
+            _, res = APP.test_client.get("/tests/admin_auth", headers={
                 "Authorization": "Bearer: %s" % ADMIN_JWT
             })
         self.assertEqual(res.status, 200)
@@ -170,10 +173,10 @@ class TestAuthenticate(TestCase):
         """Fail if the token is revoked"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            _, res_logout = app.test_client.delete("/tests/disco", headers={
+            _, res_logout = APP.test_client.delete("/tests/disco", headers={
                 "Authorization": "Bearer: %s" % REVOKED_JWT
             })
-            _, res_auth = app.test_client.get("/tests/auth", headers={
+            _, res_auth = APP.test_client.get("/tests/auth", headers={
                 "Authorization": "Bearer: %s" % REVOKED_JWT
             })
         self.assertEqual(res_logout.status, 200)
@@ -186,7 +189,7 @@ class TestRequireFields(TestCase):
         """No payload"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            _, res = app.test_client.post("/tests/fields")
+            _, res = APP.test_client.post("/tests/fields")
         self.assertEqual(res.json["error"], "JSON required")
         self.assertEqual(res.status, 400)
 
@@ -194,7 +197,7 @@ class TestRequireFields(TestCase):
         """Empty object"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            _, res = app.test_client.post("/tests/fields", json={})
+            _, res = APP.test_client.post("/tests/fields", json={})
 
         if res.json["error"] != "Fields {field1, field2} are missing"\
            and res.json["error"] != "Fields {field2, field1} are missing":
@@ -206,7 +209,7 @@ class TestRequireFields(TestCase):
         """Missing fields"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            _, res = app.test_client.post("/tests/fields", json={"field1":""})
+            _, res = APP.test_client.post("/tests/fields", json={"field1":""})
         self.assertEqual(res.json["error"], r"Fields {field2} are missing")
         self.assertEqual(res.status, 400)
 
@@ -215,7 +218,7 @@ class TestRequireFields(TestCase):
         data = {"field1": "", "field2": ""}
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            _, res = app.test_client.post("/tests/fields", json=data)
+            _, res = APP.test_client.post("/tests/fields", json=data)
 
         if res.json["error"] != "Fields {field1, field2} are missing"\
            and res.json["error"] != "Fields {field2, field1} are missing":
@@ -228,6 +231,6 @@ class TestRequireFields(TestCase):
         data = {"field1": "aze", "field2": "rty"}
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            _, res = app.test_client.post("/tests/fields", json=data)
+            _, res = APP.test_client.post("/tests/fields", json=data)
         self.assertEqual(res.json, data)
         self.assertEqual(res.status, 200)

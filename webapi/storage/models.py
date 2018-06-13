@@ -1,18 +1,18 @@
 """Data models"""
 
-from typing import NamedTuple, List, Optional, Tuple
-from uuid import UUID
-from enum import Enum
 from collections import Iterable
+from enum import Enum
+from json import dumps as json_dumps
+from typing import NamedTuple, List, Optional
+from uuid import UUID
 
-class jsonable:
+class JSONable:
+    """Mixin that add asdict and asjson methods"""
     def asdict(self):
-        if hasattr(self, "_asdict"):
-            dict_ = self._asdict()
-        else:
-            dict_ = self.__dict__.copy()
+        """Return the inner __dict__ converted to json-friendly python dict"""
+        dict_ = self.__dict__.copy()
         for key, value in dict_.items():
-            if type(value) not in [bytes, str] and isinstance(value, Iterable):
+            if not isinstance(value, bytes, str) and isinstance(value, Iterable):
                 for idx, sub_value in enumerate(value.copy()):
                     if isinstance(sub_value, UUID):
                         dict_[key][idx] = str(sub_value)
@@ -21,6 +21,10 @@ class jsonable:
             elif isinstance(value, Enum):
                 dict_[key] = value.name
         return dict_
+
+    def asjson(self):
+        """Return the inner __dict__ converted to json dict"""
+        return json_dumps(self.asdict())
 
 
 class ClientType(Enum):
@@ -41,12 +45,14 @@ class State(Enum):
 
 
 class MsgQueueType(Enum):
+    """Enum of message group"""
     USER = "user"
     GROUP = "group"
     PARTY = "party"
 
 
-class User(jsonable):
+class User(JSONable):
+    """User model"""
     userid: UUID
     name: str
     email: str
@@ -69,7 +75,8 @@ class User(jsonable):
         return tmpl.format(**self.asdict())
 
 
-class Game(jsonable):
+class Game(JSONable):
+    """Game model"""
     gameid: int
     name: str
     ownerid: UUID
@@ -88,10 +95,9 @@ class Game(jsonable):
         else:
             self.ports = [int(ports)]
 
-        
 
-
-class Group(jsonable):
+class Group(JSONable):
+    """Group model"""
     state: State
     members: List[UUID]
     gameid: UUID
@@ -106,7 +112,8 @@ class Group(jsonable):
         self.partyid = partyid
 
 
-class UserKVS(jsonable):
+class UserKVS(JSONable):
+    """User model"""
     groupid: Optional[UUID]
     partyid: Optional[UUID]
     ready: bool
@@ -117,7 +124,8 @@ class UserKVS(jsonable):
         self.ready = ready
 
 
-class Slot(jsonable):
+class Slot(JSONable):
+    """Slot model"""
     players: List[UUID]
     groups: List[UUID]
 
@@ -126,7 +134,8 @@ class Slot(jsonable):
         self.groups = groups
 
 
-class Party(jsonable):
+class Party(JSONable):
+    """Slot model"""
     gameid: UUID
     slotid: UUID
     host: str
@@ -140,6 +149,7 @@ class Party(jsonable):
 
 
 class Message(NamedTuple):
+    """Message model"""
     msgid: UUID
     timestamp: float
     message: str

@@ -1,14 +1,14 @@
+"Subscription bridge"
+
 import asyncio
 from contextlib import suppress
 from logging import getLogger
-from operator import methodcaller
 from collections import defaultdict
 from sanic import Blueprint
 from sanic.response import stream, text
-from sanic.exceptions import InvalidUsage
 from ..exceptions import PlayerNotInParty, PlayerNotInGroup
-from ..middlewares import authenticate, require_fields
-from ..storage import drivers
+from ..middlewares import authenticate
+from ..server import MSG, KVS
 from ..storage.models import ClientType, MsgQueueType
 from ..tools import async_partial
 
@@ -22,6 +22,7 @@ stop_events = {
 }
 
 async def heartbeat(res, stop_event):
+    """Each 30 seconds, write on the transport"""
     logger.debug("Start heart-beating on %s", res.transport)
     with suppress(asyncio.CancelledError):
         while True:
@@ -34,9 +35,10 @@ async def heartbeat(res, stop_event):
     logger.debug("Stop heart-beating on %s", res.transport)
 
 
-async def sub_proxy(res, stop_event, queue, id_):
+async def sub_bridge(res, stop_event, queue, id_):
+    """Send message from the messager on the http streaming"""
     logger.info("New subscribtion to queue %s:%s", queue.value, id_)
-    reciever = drivers.MSG.recv_messages(queue, id_)
+    reciever = MSG.recv_messages(queue, id_)
     async for sentinel in reciever: break  # sentinel = next(reciever)
     try:
         async for msg in reciever:
@@ -46,7 +48,7 @@ async def sub_proxy(res, stop_event, queue, id_):
                 await reciever.asend(sentinel)
                 continue
             logger.debug("Send message %s from queue %s:%s to %s",
-                        msg, queue.value, id_, res)
+                         msg, queue.value, id_, res)
             res.write(msg)
             res.write(chr(30))  # ascii unit separator
     except asyncio.CancelledError:
@@ -60,8 +62,13 @@ async def sub_proxy(res, stop_event, queue, id_):
 
 
 async def stream_until_event_is_set(res, userid, queue, queueid):
+    """
+    Stream manager, start the bridge and heartbeat, wait for a stop
+    event or the cancallation of the task to do cleanup and close
+    the underlying transport
+    """
     stop_event = asyncio.Event()
-    sf_task = asyncio.ensure_future(sub_proxy(res, stop_event, queue, queueid))
+    sf_task = asyncio.ensure_future(sub_bridge(res, stop_event, queue, queueid))
     hb_task = asyncio.ensure_future(heartbeat(res, stop_event))
 
     stop_events[queue.value][userid].append(stop_event)
@@ -81,7 +88,8 @@ async def stream_until_event_is_set(res, userid, queue, queueid):
 
 @bp.route("/user", methods=["GET"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
-async def get_user_msg(req, jwt):
+async def get_user_msg(_req, jwt):
+    """Create a HTTP Stream bridge for an user"""
     greetings(MsgQueueType.USER, jwt["uid"])
     return stream(async_partial(stream_until_event_is_set,
                                 userid=jwt["uid"],
@@ -90,8 +98,9 @@ async def get_user_msg(req, jwt):
 
 @bp.route("/group", methods=["GET"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
-async def get_group_msg(req, jwt):
-    user = await drivers.KVS.get_user(jwt["uid"])
+async def get_group_msg(_req, jwt):
+    """Create a HTTP Stream bridge for a group"""
+    user = await KVS.get_user(jwt["uid"])
     if user.groupid is None:
         raise PlayerNotInGroup()
 
@@ -103,8 +112,9 @@ async def get_group_msg(req, jwt):
 
 @bp.route("/party", methods=["GET"])
 @authenticate({ClientType.PLAYER, ClientType.ADMIN})
-async def get_party_msg(req, jwt):
-    user = await drivers.KVS.get_user(jwt["uid"])
+async def get_party_msg(_req, jwt):
+    """Create a HTTP Stream bridge for a party"""
+    user = await KVS.get_user(jwt["uid"])
     if user.partyid is None:
         raise PlayerNotInParty()
 
@@ -116,19 +126,22 @@ async def get_party_msg(req, jwt):
 
 @bp.route("/kick/<userid>/from/<queue>", methods=["DELETE"])
 @authenticate({ClientType.ADMIN})
-async def kick_user(req, queue, userid, jwt):
+async def kick_user(_req, queue, userid, _jwt):
+    """Close stream"""
     logger.info("Kicking user %s from queue %s", userid, queue)
     for event in stop_events[queue][userid].copy():
         event.set()
     return text("", status=204)
 
 def greetings(queue, id_):
+    """Send a dummy message"""
     payload = {"type": "server:notice",
                "notice": "subed to {}:{!s}".format(queue.value, id_)}
-    coro = drivers.MSG.send_message(queue, id_, payload)
+    coro = MSG.send_message(queue, id_, payload)
     asyncio.get_event_loop().call_later(0.2, asyncio.ensure_future, coro)
 
 async def close_all_connections(_app, _loop):
+    """Cleanup"""
     logger.info("Closing all streaming connections...")
     for task in tasks.copy():
         task.cancel()

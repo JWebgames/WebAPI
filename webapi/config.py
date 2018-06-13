@@ -46,22 +46,32 @@ class WebAPIConfig(NamedTuple):
     JWT_EXPIRATION_TIME: str = "12h"
     LOG_LEVEL: str = "WARNING"
     PRODUCTION: Union[lambda v: bool(strtobool(v)), bool] = False
-    REVERSE_PROXY_IPS: Optional[List[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]]] = None
     SSL_CERT_PATH: Optional[str] = None
     SSL_KEY_PATH: Optional[str] = None
     SSL_KEY_PASS: Optional[str] = None
     GROUP_URL: str = "http://localhost:22548/v1/groups"
     MSQQUEUES_URL: str = "http://localhost:22548/v1/msgqueues"
+    GAME_HOST: str = "localhost"
+    GAME_PORT_RANGE_START: int = 23000
+    GAME_PORT_RANGE_STOP: int = 24000
+
+messager: "MessagerConfig"
+@register("messager")
+class MessagerConfig(NamedTuple):
+    """Messager configuration block"""
     PULL_ADDRESS: str = "tcp://127.0.0.1:22549"
     PUB_ADDRESS: str = "tcp://127.0.0.1:22550"
-    GAME_HOST: str = "localhost"
 
+docker: "DockerConfig"
+@register("docker")
+class DockerConfig(NamedTuple):
+    """Docker configuration block"""
+    HOST: str = "unix:///var/run/docker.sock"
 
 postgres: "PostgresConfig"
 @register("postgres", "PG")
 class PostgresConfig(NamedTuple):
     """Postgres configuration block"""
-    DSN: Optional[str] = None
     HOST: Optional[str] = "/var/run/postgresql/.s.PGSQL.5432"
     PORT: Optional[int] = None
     USER: Optional[str] = None
@@ -74,9 +84,6 @@ redis: "RedisConfig"
 class RedisConfig(NamedTuple):
     """Redis configuration block"""
     DSN: Optional[str] = "/var/run/redis/redis.sock"
-    HOST: Optional[str] = None
-    PORT: Optional[int] = None
-    DATABASE: Optional[int] = None
     PASSWORD: Optional[str] = None
 
 

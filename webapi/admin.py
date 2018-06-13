@@ -1,5 +1,6 @@
+"""Helper module for admin use"""
+
 import asyncio
-from base64 import b64encode
 from getpass import getpass
 from secrets import token_bytes
 from uuid import uuid4
@@ -10,6 +11,7 @@ from .storage import drivers
 from .tools import ask_bool, lruc
 
 def wizard():
+    """Database configuration wizard"""
     loop = asyncio.get_event_loop()
 
     print("Current configuration: ")
@@ -47,7 +49,7 @@ def wizard():
                 coro = drivers.RDB.set_user_admin(user.userid, not user.isadmin)
                 loop.run_until_complete(coro)
                 print("Done")
-        
+
         if ask_bool("Create a game ?"):
             name = input("Game name: ")
             user = lruc(drivers.RDB.get_user_by_login(input("Owner login: ")))
