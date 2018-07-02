@@ -1,6 +1,6 @@
 aiodocker==0.13.0
 aiofiles==0.3.2
-aiohttp==3.3.1
+aiohttp==3.3.2
 aioredis==1.1.0
 aiozmq==0.7.1
 asyncpg==0.16.0
