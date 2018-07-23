@@ -15,7 +15,7 @@ multidict==4.3.0
 PyJWT==1.6.4
 pytimeparse==1.1.8
 PyYAML==3.13
-pyzmq==17.0.0
+pyzmq==17.1.0
 sanic==0.7.0
 scrypt==0.8.6
 ujson==1.35
