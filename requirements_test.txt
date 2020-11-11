@@ -34,5 +34,5 @@ urllib3==1.22
 uvloop==0.10.1
 websockets==5.0.1
 wrapt==1.10.11
-yarl==1.2.5
+yarl==1.2.6
 

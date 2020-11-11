@@ -21,4 +21,4 @@ scrypt==0.8.6
 ujson==1.35
 uvloop==0.10.1
 websockets==5.0.1
-yarl==1.2.5
+yarl==1.2.6
